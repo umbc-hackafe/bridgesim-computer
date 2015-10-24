@@ -1,3 +1,7 @@
+extern crate libc;
+
+use libc::c_void;
+
 // Rusty Section
 
 /// Represents how memory is mapped for a `Device`
@@ -37,33 +41,74 @@ pub enum MappedMemoryType {
 #[derive(Copy, Clone)]
 #[allow(raw_pointer_derive)]
 pub struct Device {
+    /// Pointer to the actual underlying device being operated on.
+    pub device: *mut c_void,
+
     /// Indicated whether memory mapping should be done for this device, and what type of
     /// mapping should be used.
     pub export_memory: MappedMemoryType,
     /// Indicates the size of exported memory
     pub export_memory_size: u32,
+    // Device, Address, Destination/Source
     /// Function to load a byte from the device's memory.
-    pub load_byte: Option<extern fn(u32, *mut u8) -> i32>,
+    pub load_byte: Option<extern fn(*mut c_void, u32, *mut u8) -> i32>,
     /// Function to load a word from the device's memory.
-    pub load_word: Option<extern fn(u32, *mut u16) -> i32>,
+    pub load_word: Option<extern fn(*mut c_void, u32, *mut u16) -> i32>,
     /// Function to load a dword from the device's memory.
-    pub load_dword: Option<extern fn(u32, *mut u32) -> i32>,
+    pub load_dword: Option<extern fn(*mut c_void, u32, *mut u32) -> i32>,
     /// Function to load a qword from the device's memory.
-    pub load_qword: Option<extern fn(u32, *mut u64) -> i64>,
+    pub load_qword: Option<extern fn(*mut c_void, u32, *mut u64) -> i64>,
     /// Function to save a byte to the device's memory.
-    pub write_byte: Option<extern fn(u32, u8) -> i32>,
+    pub write_byte: Option<extern fn(*mut c_void, u32, u8) -> i32>,
     /// Function to save a word to the device's memory.
-    pub write_word: Option<extern fn(u32, u16) -> i32>,
+    pub write_word: Option<extern fn(*mut c_void, u32, u16) -> i32>,
     /// Function to save a dword to the device's memory.
-    pub write_dword: Option<extern fn(u32, u32) -> i32>,
+    pub write_dword: Option<extern fn(*mut c_void, u32, u32) -> i32>,
     /// Function to save a qword to the device's memory.
-    pub write_qword: Option<extern fn(u32, u64) -> i32>,
+    pub write_qword: Option<extern fn(*mut c_void, u32, u64) -> i32>,
 
+    // Device
     /// Optional function to use to boot the device.
-    pub boot: Option<extern fn() -> i32>,
+    pub boot: Option<extern fn(*mut c_void) -> i32>,
 
+    // Device, Interrupt Code
     /// Optional function to use to send an interrupt code to the device.
-    pub interrupt: Option<extern fn(u32) -> i32>,
+    pub interrupt: Option<extern fn(*mut c_void, u32) -> i32>,
+
+    // Device, Motherboard, Motherboard Functions
+    /// Registers the motherboard's functions with this device
+    pub register_motherboard: Option<extern fn(
+        *mut c_void, *mut Motherboard, *mut MotherboardFunctions) -> i32>,
+}
+
+/// Struct for passing the motherboard's function collection to modules.
+#[repr(C)]
+#[derive(Copy, Clone)]
+#[allow(raw_pointer_derive)]
+pub struct MotherboardFunctions {
+    // Motherboard, Address, Destination.
+    /// Callback for a device to read a byte of memory.
+    pub read_byte: Option<extern fn(*mut Motherboard, u64, *mut u8) -> i32>,
+    /// Callback for a device to read a word of memory.
+    pub read_word: Option<extern fn(*mut Motherboard, u64, *mut u16) -> i32>,
+    /// Callback for a device to read a dword of memory.
+    pub read_dword: Option<extern fn(*mut Motherboard, u64, *mut u32) -> i32>,
+    /// Callback for a device to read a qword of memory.
+    pub read_qword: Option<extern fn(*mut Motherboard, u64, *mut u64) -> i32>,
+
+    // Motherboard, Address, Source.
+    /// Callback for a device to write a byte of memory.
+    pub write_byte: Option<extern fn(*mut Motherboard, u64, u8) -> i32>,
+    /// Callback for a device to write a word of memory.
+    pub write_word: Option<extern fn(*mut Motherboard, u64, u16) -> i32>,
+    /// Callback for a device to write a dword of memory.
+    pub write_dword: Option<extern fn(*mut Motherboard, u64, u32) -> i32>,
+    /// Callback for a device to write a qword of memory.
+    pub write_qword: Option<extern fn(*mut Motherboard, u64, u64) -> i32>,
+
+    // Motherboard, Target Device, Interrupt Code.
+    /// Callback for a device to send an interrupt to another device.
+    pub send_interrupt: Option<extern fn(*mut Motherboard, u32, u32) -> i32>,
 }
 
 /// Represents a motherboard in the bridgesim computer.
@@ -77,24 +122,24 @@ pub struct Motherboard {
 
 impl Motherboard {
     /// Constructs a new `Motherboard` with space for `max_devices` devices.
-    pub fn new(max_devices: usize) -> Motherboard {
+    fn new(max_devices: usize) -> Motherboard {
         Motherboard {
             devices: Vec::with_capacity(max_devices),
         }
     }
 
     /// The number of slots this motherboard has
-    pub fn num_slots(&self) -> usize {
+    fn num_slots(&self) -> usize {
         self.devices.capacity()
     }
 
     /// The number of slots filled on this motherboard
-    pub fn slots_filled(&self) -> usize {
+    fn slots_filled(&self) -> usize {
         self.devices.len()
     }
 
     /// Whether or not the motherboard of the device is filled.
-    pub fn is_full(&self) -> bool {
+    fn is_full(&self) -> bool {
         self.slots_filled() >= self.num_slots()
     }
 
@@ -103,7 +148,7 @@ impl Motherboard {
     /// # Panics
     ///
     /// This method panics if all of the motherboard expansion slots are full.
-    pub fn add_device(&mut self, device: Device) {
+    fn add_device(&mut self, device: Device) {
         if self.is_full() {
             panic!("No expansion slots left in motherboard!");
         }

@@ -1,7 +1,10 @@
 #ifndef bscomp_motherboard_h
 #define bscomp_motherboard_h
+// This file to be kept in sync with motherboard/src/lib.rs
 
 #include <stdint.h>
+
+struct MotherboardFunctions;
 
 // Represents how memory is mapped for a Device
 //
@@ -35,33 +38,69 @@ enum MappedMemoryType {
 // actual implementation must not hold on to this pointer past the lifetime of the
 // function.
 struct Device {
+    // Pointer to the actual underlying device being operated on.
+    void* device;
+
     // Indicated whether memory mapping should be done for this device, and what type of
     // mapping should be used.
     enum MappedMemoryType export_memory;
     // Indicates the size of exported memory
     uint32_t export_memory_size;
+    // Device, Address, Destination/Source
     // Function to load a byte from the device's memory.
-    int32_t (*load_byte)(uint32_t, *uint8_t);
+    int32_t (*load_byte)(void*, uint32_t, uint8_t*);
     // Function to load a word from the device's memory.
-    int32_t (*load_byte)(uint32_t, *uint16_t);
+    int32_t (*load_byte)(void*, uint32_t, uint16_t*);
     // Function to load a dword from the device's memory.
-    int32_t (*load_byte)(uint32_t, *uint32_t);
+    int32_t (*load_byte)(void*, uint32_t, uint32_t*);
     // Function to load a qword from the device's memory.
-    int32_t (*load_byte)(uint32_t, *uint64_t);
+    int32_t (*load_byte)(void*, uint32_t, uint64_t*);
     // Function to save a byte to the device's memory.
-    int32_t (*write_byte)(uint32_t, *uint8_t);
+    int32_t (*write_byte)(void*, uint32_t, uint8_t*);
     // Function to save a word to the device's memory.
-    int32_t (*write_byte)(uint32_t, *uint16_t);
+    int32_t (*write_byte)(void*, uint32_t, uint16_t*);
     // Function to save a dword to the device's memory.
-    int32_t (*write_byte)(uint32_t, *uint32_t);
+    int32_t (*write_byte)(void*, uint32_t, uint32_t*);
     // Function to save a qword to the device's memory.
-    int32_t (*write_byte)(uint32_t, *uint64_t);
+    int32_t (*write_byte)(void*, uint32_t, uint64_t*);
 
+    // Device
     // Optional function to use to boot the device.
-    int32_t (*boot)();
+    int32_t (*boot)(void*);
 
+    // Device, Interrupt Code
     // Optional function to use to send an interrupt code to the device.
-    int32_t (*interrupt)(uint32_t);
+    int32_t (*interrupt)(void*, uint32_t);
+
+    // Device, Motherboard, Motherboard Functions
+    // Function to use to register the motherboard's functions with this device.
+    int32_t (*register_motherboard)(void*, void*, struct MotherboardFunctions*);
+};
+
+struct MotherboardFunctions {
+    // Motherboard, Address, Destination.
+    // Callback for a device to read a byte of memory.
+    int32_t (*read_byte)(void*, uint64_t, uint8_t*);
+    // Callback for a device to read a word of memory.
+    int32_t (*read_byte)(void*, uint64_t, uint16_t*);
+    // Callback for a device to read a dword of memory.
+    int32_t (*read_byte)(void*, uint64_t, uint32_t*);
+    // Callback for a device to read a qword of memory.
+    int32_t (*read_byte)(void*, uint64_t, uint64_t*);
+
+    // Motherboard, Address, Source.
+    // Callback for a device to write a byte of memory.
+    int32_t (*write_byte)(void*, uint64_t, uint8_t);
+    // Callback for a device to write a word of memory.
+    int32_t (*write_byte)(void*, uint64_t, uint16_t);
+    // Callback for a device to write a dword of memory.
+    int32_t (*write_byte)(void*, uint64_t, uint32_t);
+    // Callback for a device to write a qword of memory.
+    int32_t (*write_byte)(void*, uint64_t, uint64_t);
+
+    // Motherboard, Target Device, Interrupt Code.
+    // Callback for a device to send an interrupt to another device.
+    int32_t (*send_interrupt)(void*, uint32_t, uint32_t);
 };
 
 // Create a motherboard with a pluggable device capacity of max_devices
