@@ -1,0 +1,11 @@
+[package]
+name = "motherboard"
+version = "0.1.0"
+authors = ["Zachary Stewart <zachary@zstewart.com>"]
+
+[lib]
+name = "motherboard"
+crate-type = ["dylib"]
+
+[dependencies]
+libc = "0.1.10"
