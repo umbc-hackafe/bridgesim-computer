@@ -152,11 +152,13 @@ impl Motherboard {
     /// # Panics
     ///
     /// This method panics if all of the motherboard expansion slots are full.
-    fn add_device(&mut self, device: Device) {
+    fn add_device(&mut self, device: Device) -> Result<(), &'static str>{
         if self.is_full() {
-            panic!("No expansion slots left in motherboard!");
+            Err("Cannot add device. Motherboard is full.")
+        } else {
+            self.devices.push(device);
+            Ok(())
         }
-        self.devices.push(device);
     }
 }
 
@@ -259,13 +261,10 @@ pub extern fn bscomp_motherboard_add_device(mb: *mut Motherboard, device: *mut D
     }
 
     let mb = unsafe { &mut *mb };
-
-    if mb.is_full() {
-        return -3;
-    }
-
     let device = unsafe { &mut *device };
-    mb.add_device(*device);
 
-    return 0;
+    match mb.add_device(*device) {
+        Ok(_) => 0,
+        Err(_) => -3,
+    }
 }
