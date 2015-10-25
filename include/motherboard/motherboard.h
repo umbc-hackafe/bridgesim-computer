@@ -41,6 +41,9 @@ struct Device {
     // Pointer to the actual underlying device being operated on.
     void* device;
 
+    uint32_t device_type;
+    uint32_t device_id;
+
     // Indicated whether memory mapping should be done for this device, and what type of
     // mapping should be used.
     enum MappedMemoryType export_memory;
@@ -70,7 +73,7 @@ struct Device {
 
     // Device
     // Optional function to use to boot the device.
-    int32_t (*boot)(void*);
+    int32_t (*tick)(void*);
 
     // Device, Interrupt Code
     // Optional function to use to send an interrupt code to the device.
