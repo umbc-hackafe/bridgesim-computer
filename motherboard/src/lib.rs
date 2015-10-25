@@ -41,54 +41,28 @@ pub struct Device {
 
     /// Indicates the size of exported memory
     pub export_memory_size: u32,
+
     /// Function to load a byte from the device's memory.
     ///
-    /// Should take three arguments: the device pointer, a 32 bit local memory address,
-    /// and a pointer for where to put the loaded data. The return value should be a
-    /// simulator-level (meta) error code, or zero.
-    pub load_byte: Option<extern fn(*mut c_void, u32, *mut u8) -> i32>,
-    /// Function to load a word from the device's memory.
+    /// Should take four arguments:
+    /// - The device pointer
+    /// - The (local) address to read from
+    /// - The number of bytes to read
+    /// - A pointer to the memory to store the read bytes in (assumed to be large enough).
     ///
-    /// Should take three arguments: the device pointer, a 32 bit local memory address,
-    /// and a pointer for where to put the loaded data. The return value should be a
-    /// simulator-level (meta) error code, or zero.
-    pub load_word: Option<extern fn(*mut c_void, u32, *mut u16) -> i32>,
-    /// Function to load a dword from the device's memory.
-    ///
-    /// Should take three arguments: the device pointer, a 32 bit local memory address,
-    /// and a pointer for where to put the loaded data. The return value should be a
-    /// simulator-level (meta) error code, or zero.
-    pub load_dword: Option<extern fn(*mut c_void, u32, *mut u32) -> i32>,
-    /// Function to load a qword from the device's memory.
-    ///
-    /// Should take three arguments: the device pointer, a 32 bit local memory address,
-    /// and a pointer for where to put the loaded data. The return value should be a
-    /// simulator-level (meta) error code, or zero.
-    pub load_qword: Option<extern fn(*mut c_void, u32, *mut u64) -> i64>,
+    /// Reads should simply ignore invalid memory addresses, and fill as much as they can.
+    pub load_bytes: Option<extern fn(*mut c_void, u32, u32, *mut u8) -> i32>,
     /// Function to save a byte to the device's memory.
     ///
-    /// Should take three arguments: the device pointer, a 32 bit local memory address,
-    /// and the value to store. The return value should be a simulator-level (meta) error
-    /// code, or zero.
-    pub write_byte: Option<extern fn(*mut c_void, u32, u8) -> i32>,
-    /// Function to save a word to the device's memory.
+    /// Should take four arguments:
+    /// - The device pointer
+    /// - The (local) address to write to
+    /// - The number of bytes to write
+    /// - A pointer to the memory to read the written bytes from.
     ///
-    /// Should take three arguments: the device pointer, a 32 bit local memory address,
-    /// and the value to store. The return value should be a simulator-level (meta) error
-    /// code, or zero.
-    pub write_word: Option<extern fn(*mut c_void, u32, u16) -> i32>,
-    /// Function to save a dword to the device's memory.
-    ///
-    /// Should take three arguments: the device pointer, a 32 bit local memory address,
-    /// and the value to store. The return value should be a simulator-level (meta) error
-    /// code, or zero.
-    pub write_dword: Option<extern fn(*mut c_void, u32, u32) -> i32>,
-    /// Function to save a qword to the device's memory.
-    ///
-    /// Should take three arguments: the device pointer, a 32 bit local memory address,
-    /// and the value to store. The return value should be a simulator-level (meta) error
-    /// code, or zero.
-    pub write_qword: Option<extern fn(*mut c_void, u32, u64) -> i32>,
+    /// Writes should simply ignore invalid memory addresses, and fill as much as they
+    /// can.
+    pub write_bytes: Option<extern fn(*mut c_void, u32, u32, *mut u8) -> i32>,
 
     /// Function to use to initialize the device before booting.
     ///
@@ -129,45 +103,21 @@ impl Device {
 pub struct MotherboardFunctions {
     /// Callback for a device to read a byte of memory.
     ///
-    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
-    /// memory address to copy the read memory to.
-    pub read_byte: Option<extern fn(*mut Motherboard, u64, *mut u8) -> i32>,
-    /// Callback for a device to read a word of memory.
-    ///
-    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
-    /// memory address to copy the read memory to.
-    pub read_word: Option<extern fn(*mut Motherboard, u64, *mut u16) -> i32>,
-    /// Callback for a device to read a dword of memory.
-    ///
-    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
-    /// memory address to copy the read memory to.
-    pub read_dword: Option<extern fn(*mut Motherboard, u64, *mut u32) -> i32>,
-    /// Callback for a device to read a qword of memory.
-    ///
-    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
-    /// memory address to copy the read memory to.
-    pub read_qword: Option<extern fn(*mut Motherboard, u64, *mut u64) -> i32>,
+    /// Should take four arguments:
+    /// - The motherboard
+    /// - The (global) address to read from
+    /// - The number of bytes to read
+    /// - An array of bytes to write to (assumed to be large enough)
+    pub read_bytes: Option<extern fn(*mut Motherboard, u64, u32, *mut u8) -> i32>,
 
     /// Callback for a device to write a byte of memory.
     ///
-    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
-    /// value to place in the memory.
-    pub write_byte: Option<extern fn(*mut Motherboard, u64, u8) -> i32>,
-    /// Callback for a device to write a word of memory.
-    ///
-    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
-    /// value to place in the memory.
-    pub write_word: Option<extern fn(*mut Motherboard, u64, u16) -> i32>,
-    /// Callback for a device to write a dword of memory.
-    ///
-    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
-    /// value to place in the memory.
-    pub write_dword: Option<extern fn(*mut Motherboard, u64, u32) -> i32>,
-    /// Callback for a device to write a qword of memory.
-    ///
-    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
-    /// value to place in the memory.
-    pub write_qword: Option<extern fn(*mut Motherboard, u64, u64) -> i32>,
+    /// Should take four arguments:
+    /// - The motherboard
+    /// - The (global) address to write to
+    /// - The number of bytes to write
+    /// - An array of bytes to read from (assumed to be large enough)
+    pub write_bytes: Option<extern fn(*mut Motherboard, u64, u32, *mut u8) -> i32>,
 
     /// Callback for a device to send an interrupt to another device.
     ///
@@ -228,6 +178,45 @@ impl Motherboard {
         }
     }
 
+    fn load_bytes(&self, addr: u64, dest: &mut [u8]) -> Result<(), &'static str> {
+        let ram_index = (addr >> 32) as u32;
+
+        if dest.len() > (u32::max_value() as usize) {
+            return Err("Read bytes length cannot exceed u32::max_value()");
+        }
+
+        let start_addr = addr as u32;
+        let end_addr = (start_addr as u64) + (dest.len() as u64);
+
+        if ram_index == !0 {
+            let end_addr = std::cmp::min(end_addr, self.deviceinfo_memory.len() as u64)
+                as u32;
+
+            for (d, s) in (start_addr..end_addr).enumerate() {
+                dest[d] = self.deviceinfo_memory[s as usize];
+            }
+            Ok(())
+        } else if (ram_index as usize) < self.ram_mappings.len() {
+            let device_index = self.ram_mappings[ram_index as usize];
+            let device = self.devices[device_index];
+            let end_addr = std::cmp::min(end_addr, device.export_memory_size as u64)
+                as u32;
+
+            match device.load_bytes {
+                Some(ref load_bytes) => {
+                    load_bytes(
+                        device.device, start_addr, end_addr - start_addr, &mut dest[0]);
+                    Ok(())
+                },
+                None => Err("Attempting to load bytes from a device which does not \
+                             provide load_bytes"),
+            }
+        } else {
+            // Do nothing if the memory is not mapped.
+            Ok(())
+        }
+    }
+
     /// Start the computer
     ///
     /// This function inits an maps each device, then starts calling tick on them until a
@@ -240,14 +229,7 @@ impl Motherboard {
         // Check for required functions on devices.
         for device in self.devices.iter() {
             if device.maps_memory()
-                && (device.load_byte == None
-                    || device.load_word == None
-                    || device.load_dword == None
-                    || device.load_qword == None
-                    || device.write_byte == None
-                    || device.write_word == None
-                    || device.write_dword == None
-                    || device.write_qword == None) {
+                && (device.load_bytes == None || device.write_bytes == None) {
                     return Err("A memory mapping device did not provide all of \
                                 the required functions for memory mapping.")
                 }

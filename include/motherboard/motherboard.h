@@ -31,23 +31,26 @@ struct Device {
 
     // Indicates the size of exported memory
     uint32_t export_memory_size;
-    // Device, Address, Destination/Source
     // Function to load a byte from the device's memory.
-    int32_t (*load_byte)(void*, uint32_t, uint8_t*);
-    // Function to load a word from the device's memory.
-    int32_t (*load_byte)(void*, uint32_t, uint16_t*);
-    // Function to load a dword from the device's memory.
-    int32_t (*load_byte)(void*, uint32_t, uint32_t*);
-    // Function to load a qword from the device's memory.
-    int32_t (*load_byte)(void*, uint32_t, uint64_t*);
+    //
+    // Should take four arguments:
+    // - The device pointer
+    // - The (local) address to read from
+    // - The number of bytes to read
+    // - A pointer to the memory to store the read bytes in (assumed to be large enough).
+    //
+    // Reads should simply ignore invalid memory addresses, and fill as much as they can.
+    int32_t (*load_bytes)(void*, uint32_t, uint32_t, uint8_t*);
     // Function to save a byte to the device's memory.
-    int32_t (*write_byte)(void*, uint32_t, uint8_t*);
-    // Function to save a word to the device's memory.
-    int32_t (*write_byte)(void*, uint32_t, uint16_t*);
-    // Function to save a dword to the device's memory.
-    int32_t (*write_byte)(void*, uint32_t, uint32_t*);
-    // Function to save a qword to the device's memory.
-    int32_t (*write_byte)(void*, uint32_t, uint64_t*);
+    //
+    // Should take four arguments:
+    // - The device pointer
+    // - The (local) address to write to
+    // - The number of bytes to write
+    // - A pointer to the memory to read the written bytes from.
+    //
+    // Writes should simply ignore invalid memory addresses, and fill as much as they can.
+    int32_t (*write_bytes)(void*, uint32_t, uint32_t, uint8_t*);
 
     // Device
     // Function to use to initialize the device before booting.
@@ -67,25 +70,23 @@ struct Device {
 };
 
 struct MotherboardFunctions {
-    // Motherboard, Address, Destination.
     // Callback for a device to read a byte of memory.
-    int32_t (*read_byte)(void*, uint64_t, uint8_t*);
-    // Callback for a device to read a word of memory.
-    int32_t (*read_byte)(void*, uint64_t, uint16_t*);
-    // Callback for a device to read a dword of memory.
-    int32_t (*read_byte)(void*, uint64_t, uint32_t*);
-    // Callback for a device to read a qword of memory.
-    int32_t (*read_byte)(void*, uint64_t, uint64_t*);
+    //
+    // Should take four arguments:
+    // - The motherboard
+    // - The (global) address to read from
+    // - The number of bytes to read
+    // - An array of bytes to write to (assumed to be large enough)
+    int32_t (*read_byte)(void*, uint64_t, uint32_t, uint8_t*);
 
-    // Motherboard, Address, Source.
     // Callback for a device to write a byte of memory.
-    int32_t (*write_byte)(void*, uint64_t, uint8_t);
-    // Callback for a device to write a word of memory.
-    int32_t (*write_byte)(void*, uint64_t, uint16_t);
-    // Callback for a device to write a dword of memory.
-    int32_t (*write_byte)(void*, uint64_t, uint32_t);
-    // Callback for a device to write a qword of memory.
-    int32_t (*write_byte)(void*, uint64_t, uint64_t);
+    //
+    // Should take four arguments:
+    // - The motherboard
+    // - The (global) address to write to
+    // - The number of bytes to write
+    // - An array of bytes to read from (assumed to be large enough)
+    int32_t (*write_byte)(void*, uint64_t, uint32_t, uint8_t*);
 
     // Motherboard, Target Device, Interrupt Code.
     // Callback for a device to send an interrupt to another device.
