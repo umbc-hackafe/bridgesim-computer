@@ -6,21 +6,6 @@
 
 struct MotherboardFunctions;
 
-// Represents how memory is mapped for a Device
-//
-// Different devices present different types of memory; devices intended just to be used
-// as RAM will be mapped to memory differently than devices which provide I/O.
-enum MappedMemoryType {
-    // No memory will be mapped for the device.
-    MMT_None = 0,
-    // Memory will be mapped for the device, and it will be mapped in the RAM section of
-    // system memory.
-    MMT_Ram = 1,
-    // Memory will be mapped for the device, and it will be mapped in the I/O Devices
-    // section of system memory.
-    MMT_IODevice = 2,
-};
-
 // Represents a device handled by a motherboard
 //
 // All of the device functions supplied should return an error code if they fail. However
@@ -41,12 +26,9 @@ struct Device {
     // Pointer to the actual underlying device being operated on.
     void* device;
 
-    uint32_t device_type;
+    uint64_t device_type;
     uint32_t device_id;
 
-    // Indicated whether memory mapping should be done for this device, and what type of
-    // mapping should be used.
-    enum MappedMemoryType export_memory;
     // Indicates the size of exported memory
     uint32_t export_memory_size;
     // Device, Address, Destination/Source

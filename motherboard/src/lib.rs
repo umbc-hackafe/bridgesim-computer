@@ -7,23 +7,6 @@ use std::thread;
 
 // Rusty Section
 
-/// Represents how memory is mapped for a `Device`
-///
-/// Different devices present different types of memory; devices intended just to be used
-/// as RAM will be mapped to memory differently than devices which provide I/O.
-#[repr(C)]
-#[derive(Copy, Clone, PartialEq)]
-pub enum MappedMemoryType {
-    /// No memory will be mapped for the device.
-    None = 0,
-    /// Memory will be mapped for the device, and it will be mapped in the RAM section of
-    /// system memory.
-    Ram = 1,
-    /// Memory will be mapped for the device, and it will be mapped in the I/O Devices
-    /// section of system memory.
-    IODevice = 2,
-}
-
 /// Represents a device handled by a motherboard
 ///
 /// All of the device functions supplied should return an error code if they fail. However
@@ -48,50 +31,95 @@ pub struct Device {
     pub device: *mut c_void,
 
     /// This should be a unique identifier for the type of device.
-    pub device_type: u32,
+    ///
+    /// The lower 32 bits of this type are reserved for flags giving information about the
+    /// device.
+    pub device_type: u64,
 
     /// This should be a fully unique identifier for the device within its type.
     pub device_id: u32,
 
-    /// Indicated whether memory mapping should be done for this device, and what type of
-    /// mapping should be used.
-    pub export_memory: MappedMemoryType,
     /// Indicates the size of exported memory
     pub export_memory_size: u32,
-    // Device, Address, Destination/Source
     /// Function to load a byte from the device's memory.
+    ///
+    /// Should take three arguments: the device pointer, a 32 bit local memory address,
+    /// and a pointer for where to put the loaded data. The return value should be a
+    /// simulator-level (meta) error code, or zero.
     pub load_byte: Option<extern fn(*mut c_void, u32, *mut u8) -> i32>,
     /// Function to load a word from the device's memory.
+    ///
+    /// Should take three arguments: the device pointer, a 32 bit local memory address,
+    /// and a pointer for where to put the loaded data. The return value should be a
+    /// simulator-level (meta) error code, or zero.
     pub load_word: Option<extern fn(*mut c_void, u32, *mut u16) -> i32>,
     /// Function to load a dword from the device's memory.
+    ///
+    /// Should take three arguments: the device pointer, a 32 bit local memory address,
+    /// and a pointer for where to put the loaded data. The return value should be a
+    /// simulator-level (meta) error code, or zero.
     pub load_dword: Option<extern fn(*mut c_void, u32, *mut u32) -> i32>,
     /// Function to load a qword from the device's memory.
+    ///
+    /// Should take three arguments: the device pointer, a 32 bit local memory address,
+    /// and a pointer for where to put the loaded data. The return value should be a
+    /// simulator-level (meta) error code, or zero.
     pub load_qword: Option<extern fn(*mut c_void, u32, *mut u64) -> i64>,
     /// Function to save a byte to the device's memory.
+    ///
+    /// Should take three arguments: the device pointer, a 32 bit local memory address,
+    /// and the value to store. The return value should be a simulator-level (meta) error
+    /// code, or zero.
     pub write_byte: Option<extern fn(*mut c_void, u32, u8) -> i32>,
     /// Function to save a word to the device's memory.
+    ///
+    /// Should take three arguments: the device pointer, a 32 bit local memory address,
+    /// and the value to store. The return value should be a simulator-level (meta) error
+    /// code, or zero.
     pub write_word: Option<extern fn(*mut c_void, u32, u16) -> i32>,
     /// Function to save a dword to the device's memory.
+    ///
+    /// Should take three arguments: the device pointer, a 32 bit local memory address,
+    /// and the value to store. The return value should be a simulator-level (meta) error
+    /// code, or zero.
     pub write_dword: Option<extern fn(*mut c_void, u32, u32) -> i32>,
     /// Function to save a qword to the device's memory.
+    ///
+    /// Should take three arguments: the device pointer, a 32 bit local memory address,
+    /// and the value to store. The return value should be a simulator-level (meta) error
+    /// code, or zero.
     pub write_qword: Option<extern fn(*mut c_void, u32, u64) -> i32>,
 
-    // Device
     /// Function to use to initialize the device before booting.
+    ///
+    /// Should take one argument: the device pointer.
     pub init: Option<extern fn(*mut c_void) -> i32>,
 
-    // Device
     /// Optional function to use to tick the device controller.
+    ///
+    /// Should take one argument: the device pointer.
     pub tick: Option<extern fn(*mut c_void) -> i32>,
 
-    // Device, Interrupt Code
     /// Optional function to use to send an interrupt code to the device.
+    ///
+    /// Should take two arguments: the device pointer, and the interrupt code.
     pub interrupt: Option<extern fn(*mut c_void, u32) -> i32>,
 
-    // Device, Motherboard, Motherboard Functions
     /// Registers the motherboard's functions with this device
+    ///
+    /// Should take three arguments: the device pointer, a pointer to the motherboard, and
+    /// a pointer to the table of motherboard functions. The motherboard pointer should be
+    /// saved for use in callbacks, but motherboard device table pointer should have its
+    /// contents copied; the pointer to it should not be saved.
     pub register_motherboard: Option<extern fn(
         *mut c_void, *mut Motherboard, *mut MotherboardFunctions) -> i32>,
+}
+
+impl Device {
+    /// Tells if the device should be memory mapped.
+    fn maps_memory(&self) -> bool {
+        ((1<<0) & self.device_type) != 0
+    }
 }
 
 /// Struct for passing the motherboard's function collection to modules.
@@ -99,28 +127,52 @@ pub struct Device {
 #[derive(Copy, Clone)]
 #[allow(raw_pointer_derive)]
 pub struct MotherboardFunctions {
-    // Motherboard, Address, Destination.
     /// Callback for a device to read a byte of memory.
+    ///
+    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
+    /// memory address to copy the read memory to.
     pub read_byte: Option<extern fn(*mut Motherboard, u64, *mut u8) -> i32>,
     /// Callback for a device to read a word of memory.
+    ///
+    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
+    /// memory address to copy the read memory to.
     pub read_word: Option<extern fn(*mut Motherboard, u64, *mut u16) -> i32>,
     /// Callback for a device to read a dword of memory.
+    ///
+    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
+    /// memory address to copy the read memory to.
     pub read_dword: Option<extern fn(*mut Motherboard, u64, *mut u32) -> i32>,
     /// Callback for a device to read a qword of memory.
+    ///
+    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
+    /// memory address to copy the read memory to.
     pub read_qword: Option<extern fn(*mut Motherboard, u64, *mut u64) -> i32>,
 
-    // Motherboard, Address, Source.
     /// Callback for a device to write a byte of memory.
+    ///
+    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
+    /// value to place in the memory.
     pub write_byte: Option<extern fn(*mut Motherboard, u64, u8) -> i32>,
     /// Callback for a device to write a word of memory.
+    ///
+    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
+    /// value to place in the memory.
     pub write_word: Option<extern fn(*mut Motherboard, u64, u16) -> i32>,
     /// Callback for a device to write a dword of memory.
+    ///
+    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
+    /// value to place in the memory.
     pub write_dword: Option<extern fn(*mut Motherboard, u64, u32) -> i32>,
     /// Callback for a device to write a qword of memory.
+    ///
+    /// Should take three arguments: the motherboard, the 64 bit address to use, and the
+    /// value to place in the memory.
     pub write_qword: Option<extern fn(*mut Motherboard, u64, u64) -> i32>,
 
-    // Motherboard, Target Device, Interrupt Code.
     /// Callback for a device to send an interrupt to another device.
+    ///
+    /// Should take three arguments: the motherboard, the index in the device table of the
+    /// target device, and the interrupt code to send.
     pub send_interrupt: Option<extern fn(*mut Motherboard, u32, u32) -> i32>,
 }
 
@@ -132,8 +184,7 @@ pub struct MotherboardFunctions {
 pub struct Motherboard {
     devices: Vec<Device>,
     ram_mappings: Vec<usize>,
-    io_mappings: Vec<usize>,
-    low_memory: Vec<u8>,
+    deviceinfo_memory: Vec<u8>,
     halt_chan: Option<mpsc::Sender<()>>,
 }
 
@@ -143,8 +194,7 @@ impl Motherboard {
         Motherboard {
             devices: Vec::with_capacity(max_devices),
             ram_mappings: Vec::new(),
-            io_mappings: Vec::new(),
-            low_memory: Vec::new(),
+            deviceinfo_memory: Vec::new(),
             halt_chan: None,
         }
     }
@@ -183,24 +233,24 @@ impl Motherboard {
     /// This function inits an maps each device, then starts calling tick on them until a
     /// shutdown message is received on the machine's shutdown channel.
     fn boot(&mut self) -> Result<(), &'static str> {
+        // Set a channel to use to trigger shutdown.
+        let (halt_chan_tx, halt_chan) =  mpsc::channel();
+        self.halt_chan = Some(halt_chan_tx.clone());
+
         // Check for required functions on devices.
         for device in self.devices.iter() {
-            match device.export_memory {
-                MappedMemoryType::Ram | MappedMemoryType::IODevice => {
-                    if device.load_byte == None
-                        || device.load_word == None
-                        || device.load_dword == None
-                        || device.load_qword == None
-                        || device.write_byte == None
-                        || device.write_word == None
-                        || device.write_dword == None
-                        || device.write_qword == None {
-                            return Err("A memory mapping device did not provide all of \
-                                        the required functions for memory mapping.")
-                    }
-                },
-                _ => {},
-            }
+            if device.maps_memory()
+                && (device.load_byte == None
+                    || device.load_word == None
+                    || device.load_dword == None
+                    || device.load_qword == None
+                    || device.write_byte == None
+                    || device.write_word == None
+                    || device.write_dword == None
+                    || device.write_qword == None) {
+                    return Err("A memory mapping device did not provide all of \
+                                the required functions for memory mapping.")
+                }
 
             match device.init {
                 Some(ref init) => {
@@ -217,73 +267,47 @@ impl Motherboard {
         // Place an entry in the appropriate memory-mapping table, mapping the index in
         // that table back to the device being mapped.
         for (i, device) in self.devices.iter().enumerate() {
-            match device.export_memory {
-                MappedMemoryType::Ram => self.ram_mappings.push(i),
-                MappedMemoryType::IODevice => self.io_mappings.push(i),
-                _ => {},
+            if device.maps_memory() {
+                self.ram_mappings.push(i)
             }
         }
 
         // Compute according to the layout described in memoryhandling.md the address of
         // each table which will be in the system's low memory.
         let ramstart: u64 = 3 * mem::size_of::<u64>() as u64;
-        let iostart: u64 = ramstart
+        let devstart: u64 = ramstart
             + (self.ram_mappings.len() as u64 + 1) * mem::size_of::<u32>() as u64;
-        let devstart: u64 = iostart
-            + (self.io_mappings.len() as u64 + 1) * mem::size_of::<u32>() as u64;
 
         // Load the low memory table according to the layout described in memoryhandling.md
-        self.low_memory.extend(unsafe { mem::transmute::<u64, [u8; 8]>(ramstart) }.iter());
-        self.low_memory.extend(unsafe { mem::transmute::<u64, [u8; 8]>(iostart) }.iter());
-        self.low_memory.extend(unsafe { mem::transmute::<u64, [u8; 8]>(devstart) }.iter());
+        self.deviceinfo_memory.extend(
+            unsafe { mem::transmute::<u64, [u8; 8]>(ramstart) }.iter());
+        self.deviceinfo_memory.extend(
+            unsafe { mem::transmute::<u64, [u8; 8]>(devstart) }.iter());
 
-        self.low_memory.extend(unsafe {
+        self.deviceinfo_memory.extend(unsafe {
             mem::transmute::<u32, [u8; 4]>(self.ram_mappings.len() as u32)
         }.iter());
         for mmap in self.ram_mappings.iter() {
-            self.low_memory.extend(unsafe {
+            self.deviceinfo_memory.extend(unsafe {
                 mem::transmute::<u32, [u8; 4]>(self.devices[*mmap].export_memory_size)
             }.iter());
         }
 
-        self.low_memory.extend(unsafe {
-            mem::transmute::<u32, [u8; 4]>(self.ram_mappings.len() as u32)
-        }.iter());
-        for mmap in self.io_mappings.iter() {
-            self.low_memory.extend(unsafe {
-                mem::transmute::<u32, [u8; 4]>(self.devices[*mmap].export_memory_size)
-            }.iter());
-        }
-
-        self.low_memory.extend(unsafe {
+        self.deviceinfo_memory.extend(unsafe {
             mem::transmute::<u32, [u8; 4]>(self.devices.len() as u32)
         }.iter());
         for (i, device) in self.devices.iter().enumerate() {
             unsafe {
-                self.low_memory.extend(
-                    mem::transmute::<u32, [u8; 4]>(device.device_type).iter());
-                self.low_memory.extend(
+                self.deviceinfo_memory.extend(
+                    mem::transmute::<u64, [u8; 8]>(device.device_type).iter());
+                self.deviceinfo_memory.extend(
                     mem::transmute::<u32, [u8; 4]>(device.device_id).iter());
-                self.low_memory.extend(
-                    mem::transmute::<u32, [u8; 4]>(device.export_memory as u32).iter());
             }
-            self.low_memory.extend(unsafe {
-                mem::transmute::<u32, [u8; 4]>(match device.export_memory {
-                    MappedMemoryType::Ram => {
-                        // Unwrap should never panic, since we know we inserted an item.
-                        self.ram_mappings.binary_search(&i).unwrap() + 1
-                    },
-                    MappedMemoryType::IODevice => {
-                        self.io_mappings.binary_search(&i).unwrap() + 1
-                    },
-                    _ => 0,
-                } as u32)
+            self.deviceinfo_memory.extend(unsafe {
+                mem::transmute::<u32, [u8; 4]>(
+                    self.ram_mappings.binary_search(&i).unwrap() as u32)
             }.iter());
         }
-
-        // Set a channel to use to trigger shutdown.
-        let (tx, halt_chan) =  mpsc::channel();
-        self.halt_chan = Some(tx);
 
         // Tick the devices
         // TODO(zstewar1): Multithread this part.
