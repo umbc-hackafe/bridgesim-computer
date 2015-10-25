@@ -68,6 +68,10 @@ pub struct Device {
     pub write_qword: Option<extern fn(*mut c_void, u32, u64) -> i32>,
 
     // Device
+    /// Function to use to initialize the device before booting.
+    pub init: Option<extern fn(*mut c_void) -> i32>,
+
+    // Device
     /// Optional function to use to boot the device.
     pub boot: Option<extern fn(*mut c_void) -> i32>,
 

@@ -65,6 +65,10 @@ struct Device {
     int32_t (*write_byte)(void*, uint32_t, uint64_t*);
 
     // Device
+    // Function to use to initialize the device before booting.
+    int32_t (*init)(void*);
+
+    // Device
     // Optional function to use to boot the device.
     int32_t (*boot)(void*);
 
