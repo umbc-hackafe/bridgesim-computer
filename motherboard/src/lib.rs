@@ -62,7 +62,7 @@ pub struct Device {
     ///
     /// Writes should simply ignore invalid memory addresses, and fill as much as they
     /// can.
-    pub write_bytes: Option<extern fn(*mut c_void, u32, u32, *mut u8) -> i32>,
+    pub write_bytes: Option<extern fn(*mut c_void, u32, u32, *const u8) -> i32>,
 
     /// Function to use to initialize the device before booting.
     ///
@@ -117,7 +117,7 @@ pub struct MotherboardFunctions {
     /// - The (global) address to write to
     /// - The number of bytes to write
     /// - An array of bytes to read from (assumed to be large enough)
-    pub write_bytes: Option<extern fn(*mut Motherboard, u64, u32, *mut u8) -> i32>,
+    pub write_bytes: Option<extern fn(*mut Motherboard, u64, u32, *const u8) -> i32>,
 
     /// Callback for a device to send an interrupt to another device.
     ///
@@ -178,34 +178,50 @@ impl Motherboard {
         }
     }
 
+    /// Load some bytes from the appropriate device.
+    ///
+    /// Maps the upper portion of the address to a device index and the lower portion to
+    /// addresses inside of that device. Attempts to set the device to the correct amount
+    /// of memory from the correct device. If the device index is the last index, load
+    /// from the motherboard information section instead.
     fn load_bytes(&self, addr: u64, dest: &mut [u8]) -> Result<(), &'static str> {
+        // Shift down to get the device index.
         let ram_index = (addr >> 32) as u32;
 
+        // Size-check -- it is a simulator error to try to read more than u32::max_value
+        // bytes.
         if dest.len() > (u32::max_value() as usize) {
             return Err("Read bytes length cannot exceed u32::max_value()");
         }
 
         let start_addr = addr as u32;
-        let end_addr = (start_addr as u64) + (dest.len() as u64);
 
-        if ram_index == !0 {
+        if ram_index == !0u32 {
+            // Interpret the end address as an exclusive over the length of the
+            // read. Potential for off-by-one errors, but makes it so all reads have at least
+            // one byte and makes it so no byte is unmappable.
+            let end_addr = (start_addr as u64) + (dest.len() as u64) + 1;
+
             let end_addr = std::cmp::min(end_addr, self.deviceinfo_memory.len() as u64)
                 as u32;
 
-            for (d, s) in (start_addr..end_addr).enumerate() {
-                dest[d] = self.deviceinfo_memory[s as usize];
+            // Loop over local memory writing the appropriate bytes to the read.
+            for (d, s) in (start_addr as usize..end_addr as usize).enumerate() {
+                dest[d] = self.deviceinfo_memory[s];
             }
             Ok(())
         } else if (ram_index as usize) < self.ram_mappings.len() {
+            // Find the appropriate device.
             let device_index = self.ram_mappings[ram_index as usize];
             let device = self.devices[device_index];
-            let end_addr = std::cmp::min(end_addr, device.export_memory_size as u64)
-                as u32;
+
+            // Even though devices are expected to ignore invalid reads anyway, limit to
+            // mapped memory.
+            let read_size = std::cmp::min(dest.len() as u32, device.export_memory_size);
 
             match device.load_bytes {
                 Some(ref load_bytes) => {
-                    load_bytes(
-                        device.device, start_addr, end_addr - start_addr, &mut dest[0]);
+                    load_bytes(device.device, start_addr, read_size, &mut dest[0]);
                     Ok(())
                 },
                 None => Err("Attempting to load bytes from a device which does not \
@@ -213,6 +229,43 @@ impl Motherboard {
             }
         } else {
             // Do nothing if the memory is not mapped.
+            Ok(())
+        }
+    }
+
+    fn write_bytes(&self, addr: u64, source: &[u8]) -> Result<(), &'static str> {
+        // Shift down to get the device index.
+        let ram_index = (addr >> 32) as u32;
+
+        // Size-check -- it is a simulator error to try to read more than u32::max_value
+        // bytes.
+        if source.len() > (u32::max_value() as usize) {
+            return Err("Write bytes length cannot exceed u32::max_value()");
+        }
+
+        let start_addr = addr as u32;
+
+        if ram_index == !0u32 {
+            // Ignore writes to motherboard memory.
+            Ok(())
+        } else if (ram_index as usize) < self.ram_mappings.len() {
+            // find the appropriate device.
+            let device_index = self.ram_mappings[ram_index as usize];
+            let device = self.devices[device_index];
+
+            // Clamp to mapped memory (even though devices should ignore invalid writes).
+            let read_size = std::cmp::min(source.len() as u32, device.export_memory_size);
+
+            match device.write_bytes {
+                Some(ref load_bytes) => {
+                    load_bytes(device.device, start_addr, read_size, &source[0]);
+                    Ok(())
+                },
+                None => Err("Attempting to write bytres to a device which does not provide \
+                             the write_bytes method"),
+            }
+        } else {
+            // Ignore writes to unmapped memory.
             Ok(())
         }
     }
