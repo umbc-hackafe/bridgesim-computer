@@ -3,7 +3,6 @@ extern crate libc;
 use libc::c_void;
 use std::mem;
 use std::sync::mpsc;
-use std::thread;
 
 // Rusty Section
 
@@ -293,19 +292,25 @@ impl Motherboard {
         if device == !0u32 {
             match code {
                 1 => match self.halt_chan {
-                    Some(ref ch) => match ch.send(()) {
-                        Ok(_) => 0,
-                        // Dissconnected = not booted
-                        Err(_) => -1,
+                    Some(ref ch) => {
+                        let ch = (*ch).clone();
+                        match ch.send(()) {
+                            Ok(_) => 0,
+                            // Dissconnected = not booted
+                            Err(_) => -1,
+                        }
                     },
                     // No channel = not booted
                     None => -1,
                 },
                 2 => match self.reboot_chan {
-                    Some(ref ch) => match ch.send(()) {
-                        Ok(_) => 0,
-                        // Disconnected = not booted
-                        Err(_) => -1,
+                    Some(ref ch) => {
+                        let ch = (*ch).clone();
+                        match ch.send(()) {
+                            Ok(_) => 0,
+                            // Disconnected = not booted
+                            Err(_) => -1,
+                        }
                     },
                     // No channel = not booted
                     None => -1,
@@ -335,6 +340,14 @@ impl Motherboard {
         self.halt_chan = Some(halt_chan_tx.clone());
         self.reboot_chan = Some(reboot_chan_tx.clone());
 
+        let mut mbfuncs = MotherboardFunctions {
+            read_bytes: Some(bscomp_motherboard_load_bytes),
+            write_bytes: Some(bscomp_motherboard_write_bytes),
+            send_interrupt: Some(bscomp_motherboard_send_interrupt),
+        };
+
+        let sp: *mut Motherboard = self;
+
         // Check for required functions on devices.
         for device in self.devices.iter() {
             if device.maps_memory()
@@ -343,16 +356,10 @@ impl Motherboard {
                                 the required functions for memory mapping.")
                 }
 
-            match device.init {
-                Some(ref init) => {
-                    if init(device.device) != 0 {
-                        return Err("A Device failed to initialize.")
-                    }
-                }
-                _ => {}
+            match device.register_motherboard {
+                Some(ref register) => { register(device.device, sp, &mut mbfuncs); },
+                None => {},
             }
-
-            // TODO(zstewar1): Register motherboard.
         }
 
         // Place an entry in the appropriate memory-mapping table, mapping the index in
@@ -398,6 +405,14 @@ impl Motherboard {
                 mem::transmute::<u32, [u8; 4]>(
                     self.ram_mappings.binary_search(&i).unwrap() as u32)
             }.iter());
+        }
+
+        for device in self.devices.iter() {
+            match device.init {
+                // errors will just be ignored....
+                Some(ref init) => { init(device.device); },
+                None => {},
+            };
         }
 
         for device in self.devices.iter() {
@@ -581,7 +596,7 @@ pub extern fn bscomp_motherboard_load_bytes(
 
 /// C-callable write-bytes method
 pub extern fn bscomp_motherboard_write_bytes(
-    mb: *mut Motherboard, addr: u64, bytes_count: u32, source: *mut u8) -> i32 {
+    mb: *mut Motherboard, addr: u64, bytes_count: u32, source: *const u8) -> i32 {
 
     if mb.is_null() {
         -1
@@ -590,9 +605,35 @@ pub extern fn bscomp_motherboard_write_bytes(
     } else {
         let mb = unsafe { &mut *mb };
         let src = unsafe {
-            std::slice::from_raw_parts_mut(source, (bytes_count as usize))
+            std::slice::from_raw_parts(source, (bytes_count as usize))
         };
 
         mb.write_bytes(addr, src)
+    }
+}
+
+/// C-callable send-interrupt method
+pub extern fn bscomp_motherboard_send_interrupt(
+    mb: *mut Motherboard, device: u32, code: u32) -> i32 {
+
+    if mb.is_null() {
+        -1
+    } else {
+        let mb = unsafe { &mut *mb};
+        mb.send_interrupt(device, code)
+    }
+}
+
+/// Boot the motherboard -- hangs until shutdown.
+#[no_mangle]
+pub extern fn bscomp_motherboard_boot(mb: *mut Motherboard) -> i32 {
+    if mb.is_null() {
+        -1
+    } else {
+        let mb = unsafe { &mut *mb };
+        match mb.boot() {
+            Ok(_) => 0,
+            Err(_) => -2,
+        }
     }
 }
