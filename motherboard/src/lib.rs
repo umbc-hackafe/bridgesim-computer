@@ -331,7 +331,9 @@ impl Motherboard {
     fn boot(&mut self) -> Result<(), &'static str> {
         // Set a channel to use to trigger shutdown.
         let (halt_chan_tx, halt_chan) =  mpsc::channel();
+        let (reboot_chan_tx, reboot_chan) = mpsc::channel();
         self.halt_chan = Some(halt_chan_tx.clone());
+        self.reboot_chan = Some(reboot_chan_tx.clone());
 
         // Check for required functions on devices.
         for device in self.devices.iter() {
@@ -398,11 +400,30 @@ impl Motherboard {
             }.iter());
         }
 
+        for device in self.devices.iter() {
+            match device.reset {
+                Some(ref reset) => { reset(device.device); },
+                None => {},
+            };
+        }
+
         // Tick the devices
         // TODO(zstewar1): Multithread this part.
         loop {
             match halt_chan.try_recv() {
                 Ok(_) | Err(mpsc::TryRecvError::Disconnected) => break,
+                Err(mpsc::TryRecvError::Empty) => {},
+            }
+            match reboot_chan.try_recv() {
+                Ok(_) => {
+                    for device in self.devices.iter() {
+                        match device.reset {
+                            Some(ref reset) => { reset(device.device); },
+                            None => {},
+                        };
+                    }
+                }
+                Err(mpsc::TryRecvError::Disconnected) => break,
                 Err(mpsc::TryRecvError::Empty) => {},
             }
             for device in self.devices.iter() {
@@ -415,6 +436,16 @@ impl Motherboard {
                 }
             }
         }
+
+        for device in self.devices.iter() {
+            match device.cleanup {
+                Some(ref cleanup) => { cleanup(device.device); },
+                None => {},
+            };
+        }
+
+        self.halt_chan = None;
+        self.reboot_chan = None;
 
         Ok(())
     }
