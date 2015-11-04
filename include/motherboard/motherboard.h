@@ -57,7 +57,15 @@ struct Device {
     int32_t (*init)(void*);
 
     // Device
-    // Optional function to use to boot the device.
+    // Function to reset the device before booting and during rebooting.
+    int32_t (*reset)(void*);
+
+    // Device
+    // Function to cleanup resources from init.
+    int32_t (*cleanup)(void*);
+
+    // Device Optional function to use to step the device. Motherboard functions from
+    // MotherboarFunctions should only be called from within here.
     int32_t (*tick)(void*);
 
     // Device, Interrupt Code
@@ -66,6 +74,9 @@ struct Device {
 
     // Device, Motherboard, Motherboard Functions
     // Function to use to register the motherboard's functions with this device.
+    //
+    // Can keep the pointer to the motherboard, but need to copy the motherboard
+    // functions.
     int32_t (*register_motherboard)(void*, void*, struct MotherboardFunctions*);
 };
 
@@ -77,7 +88,7 @@ struct MotherboardFunctions {
     // - The (global) address to read from
     // - The number of bytes to read
     // - An array of bytes to write to (assumed to be large enough)
-    int32_t (*read_byte)(void*, uint64_t, uint32_t, uint8_t*);
+    int32_t (*read_bytes)(void*, uint64_t, uint32_t, uint8_t*);
 
     // Callback for a device to write a byte of memory.
     //
@@ -86,7 +97,7 @@ struct MotherboardFunctions {
     // - The (global) address to write to
     // - The number of bytes to write
     // - An array of bytes to read from (assumed to be large enough)
-    int32_t (*write_byte)(void*, uint64_t, uint32_t, uint8_t*);
+    int32_t (*write_bytes)(void*, uint64_t, uint32_t, uint8_t*);
 
     // Motherboard, Target Device, Interrupt Code.
     // Callback for a device to send an interrupt to another device.
@@ -125,5 +136,16 @@ int32_t bscomp_motherboard_is_full(void* motherboard);
 // the device. However, it is the responsibility of the caller to enure that any function
 // pointers included in the device live longer than the motherboard.
 int32_t bscomp_motherboard_add_device(void* motherboard, struct Device* device);
+
+// Boot the motherboard, and hang until shutdown.
+//
+// If you want to be able to kill from outside teh box, launch this in a separate thread.
+int32_t bscomp_motherboard_boot(void* motherboard);
+
+// Halt the motherboard
+int32_t bscomp_motherboard_halt(void* motherboard);
+
+// Reboot the motherboard
+int32_t bscomp_motherboard_reboot(void* motherboard);
 
 #endif // bscomp_motherboard_h
