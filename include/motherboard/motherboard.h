@@ -31,6 +31,11 @@ struct Device {
 
     // Indicates the size of exported memory
     uint32_t export_memory_size;
+
+    // Read and Write need not be thread safe, as multiple devices accessing the same
+    // memory can be highly unsafe. It is expected that devices define protocols for safe
+    // communication using a combination of shared memory and interrupts.
+
     // Function to load a byte from the device's memory.
     //
     // Should take four arguments:
@@ -54,22 +59,41 @@ struct Device {
 
     // Device
     // Function to use to initialize the device before booting.
+    //
+    // Device init order is undefined so don't rely on other devices here.  Called after
+    // register motherboard.
     int32_t (*init)(void*);
 
     // Device
     // Function to reset the device before booting and during rebooting.
+    //
+    // Don't rely on other device here, as reset order is undefined. Called after init.
     int32_t (*reset)(void*);
 
     // Device
     // Function to cleanup resources from init.
+    //
+    // This function is called after all devices have left the boot state. Cleanup order
+    // of devices is undefined, so don't rely on device memory here.
     int32_t (*cleanup)(void*);
 
-    // Device Optional function to use to step the device. Motherboard functions from
-    // MotherboarFunctions should only be called from within here.
-    int32_t (*tick)(void*);
+    // Device Optional function to use to run the device. Called once per boot, after init
+    // and reset. Accessing other devices is Ok here.
+    //
+    // It should loop until the device shuts down. If this method exists, then
+    // interrupt is expeted to be provided, with interrupt 0 telling the device to stop
+    // running. If a device provides boot but not interrupt, it is an error on motheboard
+    // boot. If a device provides boot and does not quit when interrupt 0 is received, the
+    // motherboard will hang waiting for it to shutdown.
+    //
+    // This should not handle device initialization, as the initialization order of these
+    // devices with respect to any others is not defined.
+    int32_t (*boot)(void*);
 
     // Device, Interrupt Code
     // Optional function to use to send an interrupt code to the device.
+    //
+    // This should be done in a threadsafe way to allow safe inter-device communication.
     int32_t (*interrupt)(void*, uint32_t);
 
     // Device, Motherboard, Motherboard Functions
@@ -77,6 +101,8 @@ struct Device {
     //
     // Can keep the pointer to the motherboard, but need to copy the motherboard
     // functions.
+    //
+    // This function is called before init, reset, or boot.
     int32_t (*register_motherboard)(void*, void*, struct MotherboardFunctions*);
 };
 

@@ -4,8 +4,15 @@ use libc::c_void;
 use std::mem;
 use std::sync::mpsc;
 use std::sync::Mutex;
+use std::thread;
 
 // Rusty Section
+
+/// Enum to send to the motherboard to change state.
+enum MotherboardInterrupt {
+    Halt,
+    Reboot,
+}
 
 /// Represents a device handled by a motherboard
 ///
@@ -81,10 +88,12 @@ pub struct Device {
 
     /// Optional function to use to tick the device controller.
     ///
-    /// Should take one argument: the device pointer.
+    /// Should take one argument: the device pointer. This function should run until the
+    /// device is shut down.
     ///
-    /// Modules should only call motherboard functions from within this function.
-    pub tick: Option<extern fn(*mut c_void) -> i32>,
+    /// Any device which implements this function is expected to provide an `interrupt`
+    /// function which shuts down the boot loop when interrupt zero is received.
+    pub boot: Option<extern fn(*mut c_void) -> i32>,
 
     /// Optional function to use to send an interrupt code to the device.
     ///
@@ -147,8 +156,7 @@ pub struct Motherboard {
     devices: Vec<Device>,
     ram_mappings: Vec<usize>,
     deviceinfo_memory: Vec<u8>,
-    halt_chan: Mutex<Option<mpsc::Sender<()>>>,
-    reboot_chan: Mutex<Option<mpsc::Sender<()>>>,
+    interrupt_chan: Mutex<Option<mpsc::Sender<MotherboardInterrupt>>>,
 }
 
 impl Motherboard {
@@ -158,8 +166,7 @@ impl Motherboard {
             devices: Vec::with_capacity(max_devices),
             ram_mappings: Vec::new(),
             deviceinfo_memory: Vec::new(),
-            halt_chan: Mutex::new(None),
-            reboot_chan: Mutex::new(None),
+            interrupt_chan: Mutex::new(None),
         }
     }
 
@@ -234,7 +241,7 @@ impl Motherboard {
             let read_size = std::cmp::min(dest.len() as u32, device.export_memory_size);
 
             match device.load_bytes {
-                Some(ref load_bytes) => {
+                Some(load_bytes) => {
                     load_bytes(device.device, start_addr, read_size, &mut dest[0])
                 },
                 // Device does not provide read-bytes. This is not a simulator error, it's
@@ -274,7 +281,7 @@ impl Motherboard {
                 source.len() as u32, device.export_memory_size - start_addr);
 
             match device.write_bytes {
-                Some(ref load_bytes) => {
+                Some(load_bytes) => {
                     load_bytes(device.device, start_addr, read_size, &source[0])
                 },
                 // Device does not provide write-bytes. This is not a simulator error, it's
@@ -293,44 +300,37 @@ impl Motherboard {
     /// If the device is `0xffffffff`, send to the motherboard.
     fn send_interrupt(&self, device: u32, code: u32) -> i32 {
         if device == !0u32 {
-            match code {
-                1 => {
-                    let hc = self.halt_chan.lock().unwrap();
-                    match *hc {
-                        Some(ref ch) => {
-                            let ch = (*ch).clone();
-                            match ch.send(()) {
-                                Ok(_) => 0,
-                                // Dissconnected = not booted
-                                Err(_) => -1,
-                            }
-                        },
-                        // No channel = not booted
-                        None => -1,
+            // ignore unknow interrupts.
+            if code > 1 {
+                return 0;
+            }
+
+            let ic = self.interrupt_chan.lock().unwrap();
+            match *ic {
+                Some(ref ch) => {
+                    let ch = (*ch).clone();
+                    let code = match code {
+                        0 => MotherboardInterrupt::Halt,
+                        1 => MotherboardInterrupt::Reboot,
+                        // We have assured this never happens above, so just use halt as
+                        // the default.
+                        _ => MotherboardInterrupt::Halt,
+                    };
+
+                    match ch.send(code) {
+                        Ok(_) => 0,
+                        // Dissconnected = not booted
+                        Err(_) => -1,
                     }
                 },
-                2 => {
-                    let rbc = self.reboot_chan.lock().unwrap();
-                    match *rbc {
-                        Some(ref ch) => {
-                            let ch = (*ch).clone();
-                            match ch.send(()) {
-                                Ok(_) => 0,
-                                // Disconnected = not booted
-                                Err(_) => -1,
-                            }
-                        },
-                        // No channel = not booted
-                        None => -1,
-                    }
-                },
-                _ => 0,
+                // No channel = not booted
+                None => -1,
             }
         } else if (device as usize) < self.devices.len() {
             let device = self.devices[device as usize];
 
             match device.interrupt {
-                Some(ref interrupt) => interrupt(device.device, code),
+                Some(interrupt) => interrupt(device.device, code),
                 None => 0,
             }
         } else {
@@ -344,15 +344,10 @@ impl Motherboard {
     /// shutdown message is received on the machine's shutdown channel.
     fn boot(&mut self) -> Result<(), &'static str> {
         // Set a channel to use to trigger shutdown.
-        let (halt_chan_tx, halt_chan) =  mpsc::channel();
-        let (reboot_chan_tx, reboot_chan) = mpsc::channel();
+        let (interrupt_chan_tx, interrupt_chan) =  mpsc::channel();
         {
-            let mut hc = self.halt_chan.lock().unwrap();
-            *hc = Some(halt_chan_tx.clone());
-        }
-        {
-            let mut rbc = self.reboot_chan.lock().unwrap();
-            *rbc = Some(reboot_chan_tx.clone());
+            let mut ic = self.interrupt_chan.lock().unwrap();
+            *ic = Some(interrupt_chan_tx.clone());
         }
 
         let mut mbfuncs = MotherboardFunctions {
@@ -366,13 +361,20 @@ impl Motherboard {
         // Check for required functions on devices.
         for device in self.devices.iter() {
             if device.maps_memory()
-                && (device.load_bytes == None || device.write_bytes == None) {
+                && (device.load_bytes.is_none() || device.write_bytes.is_none()) {
                     return Err("A memory mapping device did not provide all of \
-                                the required functions for memory mapping.")
+                                the required functions for memory mapping.");
                 }
 
+            if device.boot.is_some() && device.interrupt.is_none() {
+                return Err("A device with a boot method did not provide the required \
+                            interrupt method.");
+            }
+        }
+
+        for device in self.devices.iter() {
             match device.register_motherboard {
-                Some(ref register) => { register(device.device, sp, &mut mbfuncs); },
+                Some(register) => { register(device.device, sp, &mut mbfuncs); },
                 None => {},
             }
         }
@@ -425,62 +427,75 @@ impl Motherboard {
         for device in self.devices.iter() {
             match device.init {
                 // errors will just be ignored....
-                Some(ref init) => { init(device.device); },
+                Some(init) => { init(device.device); },
                 None => {},
             };
         }
 
-        for device in self.devices.iter() {
-            match device.reset {
-                Some(ref reset) => { reset(device.device); },
-                None => {},
-            };
-        }
-
-        // Tick the devices
-        // TODO(zstewar1): Multithread this part.
         loop {
-            match halt_chan.try_recv() {
-                Ok(_) | Err(mpsc::TryRecvError::Disconnected) => break,
-                Err(mpsc::TryRecvError::Empty) => {},
-            }
-            match reboot_chan.try_recv() {
-                Ok(_) => {
-                    for device in self.devices.iter() {
-                        match device.reset {
-                            Some(ref reset) => { reset(device.device); },
-                            None => {},
-                        };
-                    }
-                }
-                Err(mpsc::TryRecvError::Disconnected) => break,
-                Err(mpsc::TryRecvError::Empty) => {},
-            }
             for device in self.devices.iter() {
-                match device.tick {
-                    Some(ref tick) => {
-                        // TODO(zstewar1): Handle error codes?
-                        tick(device.device);
+                match device.reset {
+                    Some(reset) => { reset(device.device); },
+                    None => {},
+                };
+            }
+
+            // Boot the devices.
+            let mut thread_handles = Vec::new();
+
+            for device in self.devices.iter() {
+                match device.boot {
+                    Some(boot) => {
+                        let boot = boot;
+
+                        // Coherce this pointer to a reference because pointers are not
+                        // "send". Then send the reference and coherce it back to a
+                        // pointer.
+                        let device = unsafe { &mut *device.device };
+                        let thread_handle = thread::spawn(move || {
+                            let device = device;
+                            boot(device);
+                        });
+
+                        thread_handles.push(thread_handle);
                     },
                     None => {},
                 }
             }
+
+            let action = match interrupt_chan.recv() {
+                Ok(action) => action,
+                Err(_) => MotherboardInterrupt::Halt,
+            };
+
+            // Order all devices to halt.
+            for device in self.devices.iter() {
+                if device.boot.is_some() {
+                    // Have already assured that interrupt is some before booting.
+                    device.interrupt.unwrap()(device.device, 0);
+                }
+            }
+
+            for handle in thread_handles.into_iter() {
+                let _ = handle.join();
+            }
+
+            match action {
+                MotherboardInterrupt::Halt => break,
+                _ => {},
+            };
         }
 
         for device in self.devices.iter() {
             match device.cleanup {
-                Some(ref cleanup) => { cleanup(device.device); },
+                Some(cleanup) => { cleanup(device.device); },
                 None => {},
             };
         }
 
         {
-            let mut hc = self.halt_chan.lock().unwrap();
-            *hc = None;
-        }
-        {
-            let mut rbc = self.reboot_chan.lock().unwrap();
-            *rbc = None;
+            let mut ic = self.interrupt_chan.lock().unwrap();
+            *ic = None;
         }
 
         Ok(())
@@ -488,15 +503,15 @@ impl Motherboard {
 
     /// Halt the machine. This method is threadsafe!
     fn halt(&self) -> i32 {
-        let hc = self.halt_chan.lock().unwrap();
-        match *hc {
+        let ic = self.interrupt_chan.lock().unwrap();
+        match *ic {
             Some(ref ch) => {
                 let ch = (*ch).clone();
-                match ch.send(()) {
+                match ch.send(MotherboardInterrupt::Halt) {
                     Ok(_) => 0,
                     // Dissconnected = not booted
                     Err(_) => -1,
-                }
+                    }
             },
             // No channel = not booted
             None => -1,
@@ -505,15 +520,15 @@ impl Motherboard {
 
     /// Reboot the machine. This method is threadsafe!
     fn reboot(&self) -> i32 {
-        let rbc = self.reboot_chan.lock().unwrap();
-        match *rbc {
+        let ic = self.interrupt_chan.lock().unwrap();
+        match *ic {
             Some(ref ch) => {
                 let ch = (*ch).clone();
-                match ch.send(()) {
+                match ch.send(MotherboardInterrupt::Reboot) {
                     Ok(_) => 0,
                     // Dissconnected = not booted
                     Err(_) => -1,
-                }
+                    }
             },
             // No channel = not booted
             None => -1,

@@ -77,3 +77,11 @@ following table:
 
 The mapped memory index is the index of that device's mapped memory information in the ram
 data table.
+
+# Safety
+
+The motherboard does not guarantee memory access safety in any way. Because internal
+handling uses functions for passing memory, not a bus, there are no bus collisions, but
+there are no guarantees about interleaving memory accesses. Devices are expected to
+implement their own rules for memory access and use interrupt handlers to indicate
+statuses.
