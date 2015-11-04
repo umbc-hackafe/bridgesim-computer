@@ -485,6 +485,40 @@ impl Motherboard {
 
         Ok(())
     }
+
+    /// Halt the machine. This method is threadsafe!
+    fn halt(&self) -> i32 {
+        let hc = self.halt_chan.lock().unwrap();
+        match *hc {
+            Some(ref ch) => {
+                let ch = (*ch).clone();
+                match ch.send(()) {
+                    Ok(_) => 0,
+                    // Dissconnected = not booted
+                    Err(_) => -1,
+                }
+            },
+            // No channel = not booted
+            None => -1,
+        }
+    }
+
+    /// Reboot the machine. This method is threadsafe!
+    fn reboot(&self) -> i32 {
+        let rbc = self.reboot_chan.lock().unwrap();
+        match *rbc {
+            Some(ref ch) => {
+                let ch = (*ch).clone();
+                match ch.send(()) {
+                    Ok(_) => 0,
+                    // Dissconnected = not booted
+                    Err(_) => -1,
+                }
+            },
+            // No channel = not booted
+            None => -1,
+        }
+    }
 }
 
 // CFFI
@@ -655,5 +689,25 @@ pub extern fn bscomp_motherboard_boot(mb: *mut Motherboard) -> i32 {
             Ok(_) => 0,
             Err(_) => -2,
         }
+    }
+}
+
+/// Halt the machine
+#[no_mangle]
+pub extern fn bscomp_motherboard_halt(mb: *mut Motherboard) -> i32 {
+    if mb.is_null() { -1 }
+    else {
+        let mb = unsafe { &mut *mb };
+        mb.halt()
+    }
+}
+
+/// Reboot the machine
+#[no_mangle]
+pub extern fn bscomp_motherboard_reboot(mb: *mut Motherboard) -> i32 {
+    if mb.is_null() { -1 }
+    else {
+        let mb = unsafe { &mut *mb };
+        mb.reboot()
     }
 }
