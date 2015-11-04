@@ -3,6 +3,7 @@ extern crate libc;
 use libc::c_void;
 use std::mem;
 use std::sync::mpsc;
+use std::sync::Mutex;
 
 // Rusty Section
 
@@ -81,6 +82,8 @@ pub struct Device {
     /// Optional function to use to tick the device controller.
     ///
     /// Should take one argument: the device pointer.
+    ///
+    /// Modules should only call motherboard functions from within this function.
     pub tick: Option<extern fn(*mut c_void) -> i32>,
 
     /// Optional function to use to send an interrupt code to the device.
@@ -144,8 +147,8 @@ pub struct Motherboard {
     devices: Vec<Device>,
     ram_mappings: Vec<usize>,
     deviceinfo_memory: Vec<u8>,
-    halt_chan: Option<mpsc::Sender<()>>,
-    reboot_chan: Option<mpsc::Sender<()>>,
+    halt_chan: Mutex<Option<mpsc::Sender<()>>>,
+    reboot_chan: Mutex<Option<mpsc::Sender<()>>>,
 }
 
 impl Motherboard {
@@ -155,8 +158,8 @@ impl Motherboard {
             devices: Vec::with_capacity(max_devices),
             ram_mappings: Vec::new(),
             deviceinfo_memory: Vec::new(),
-            halt_chan: None,
-            reboot_chan: None,
+            halt_chan: Mutex::new(None),
+            reboot_chan: Mutex::new(None),
         }
     }
 
@@ -291,29 +294,35 @@ impl Motherboard {
     fn send_interrupt(&self, device: u32, code: u32) -> i32 {
         if device == !0u32 {
             match code {
-                1 => match self.halt_chan {
-                    Some(ref ch) => {
-                        let ch = (*ch).clone();
-                        match ch.send(()) {
-                            Ok(_) => 0,
-                            // Dissconnected = not booted
-                            Err(_) => -1,
-                        }
-                    },
-                    // No channel = not booted
-                    None => -1,
+                1 => {
+                    let hc = self.halt_chan.lock().unwrap();
+                    match *hc {
+                        Some(ref ch) => {
+                            let ch = (*ch).clone();
+                            match ch.send(()) {
+                                Ok(_) => 0,
+                                // Dissconnected = not booted
+                                Err(_) => -1,
+                            }
+                        },
+                        // No channel = not booted
+                        None => -1,
+                    }
                 },
-                2 => match self.reboot_chan {
-                    Some(ref ch) => {
-                        let ch = (*ch).clone();
-                        match ch.send(()) {
-                            Ok(_) => 0,
-                            // Disconnected = not booted
-                            Err(_) => -1,
-                        }
-                    },
-                    // No channel = not booted
-                    None => -1,
+                2 => {
+                    let rbc = self.reboot_chan.lock().unwrap();
+                    match *rbc {
+                        Some(ref ch) => {
+                            let ch = (*ch).clone();
+                            match ch.send(()) {
+                                Ok(_) => 0,
+                                // Disconnected = not booted
+                                Err(_) => -1,
+                            }
+                        },
+                        // No channel = not booted
+                        None => -1,
+                    }
                 },
                 _ => 0,
             }
@@ -337,8 +346,14 @@ impl Motherboard {
         // Set a channel to use to trigger shutdown.
         let (halt_chan_tx, halt_chan) =  mpsc::channel();
         let (reboot_chan_tx, reboot_chan) = mpsc::channel();
-        self.halt_chan = Some(halt_chan_tx.clone());
-        self.reboot_chan = Some(reboot_chan_tx.clone());
+        {
+            let mut hc = self.halt_chan.lock().unwrap();
+            *hc = Some(halt_chan_tx.clone());
+        }
+        {
+            let mut rbc = self.reboot_chan.lock().unwrap();
+            *rbc = Some(reboot_chan_tx.clone());
+        }
 
         let mut mbfuncs = MotherboardFunctions {
             read_bytes: Some(bscomp_motherboard_load_bytes),
@@ -459,12 +474,17 @@ impl Motherboard {
             };
         }
 
-        self.halt_chan = None;
-        self.reboot_chan = None;
+        {
+            let mut hc = self.halt_chan.lock().unwrap();
+            *hc = None;
+        }
+        {
+            let mut rbc = self.reboot_chan.lock().unwrap();
+            *rbc = None;
+        }
 
         Ok(())
     }
-
 }
 
 // CFFI
