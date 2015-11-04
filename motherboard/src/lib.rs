@@ -184,14 +184,14 @@ impl Motherboard {
     /// addresses inside of that device. Attempts to set the device to the correct amount
     /// of memory from the correct device. If the device index is the last index, load
     /// from the motherboard information section instead.
-    fn load_bytes(&self, addr: u64, dest: &mut [u8]) -> Result<(), &'static str> {
+    fn load_bytes(&self, addr: u64, dest: &mut [u8]) -> i32 {
         // Shift down to get the device index.
         let ram_index = (addr >> 32) as u32;
 
         // Size-check -- it is a simulator error to try to read more than u32::max_value
         // bytes.
-        if dest.len() > u32::max_value() as usize {
-            return Err("Read bytes length cannot exceed u32::max_value()");
+        if dest.len() > (u32::max_value() as usize) {
+            return -10
         }
 
         let start_addr = addr as u32;
@@ -209,7 +209,7 @@ impl Motherboard {
             for (d, s) in (start_addr as usize..end_addr as usize).enumerate() {
                 dest[d] = self.deviceinfo_memory[s];
             }
-            Ok(())
+            0
         } else if (ram_index as usize) < self.ram_mappings.len() {
             // Find the appropriate device.
             let device_index = self.ram_mappings[ram_index as usize];
@@ -217,56 +217,59 @@ impl Motherboard {
 
             // Even though devices are expected to ignore invalid reads anyway, limit to
             // mapped memory.
-            let read_size = std::cmp::min(dest.len(), device.export_memory_size as usize) - 1;
+            let read_size = std::cmp::min(dest.len() as u32, device.export_memory_size);
 
             match device.load_bytes {
                 Some(ref load_bytes) => {
-                    load_bytes(device.device, start_addr, read_size as usize, &mut dest[0]);
-                    Ok(())
+                    load_bytes(device.device, start_addr, read_size, &mut dest[0])
                 },
-                None => Err("Attempting to load bytes from a device which does not \
-                             provide load_bytes"),
+                // Device does not provide read-bytes. This is not a simulator error, it's
+                // an invalid operation which would have to be prevented by the operating
+                // system.
+                None => 0,
             }
         } else {
             // Do nothing if the memory is not mapped.
-            Ok(())
+            0
         }
     }
 
-    fn write_bytes(&self, addr: u64, source: &[u8]) -> Result<(), &'static str> {
+    fn write_bytes(&self, addr: u64, source: &[u8]) -> i32 {
         // Shift down to get the device index.
         let ram_index = (addr >> 32) as u32;
 
         // Size-check -- it is a simulator error to try to read more than u32::max_value
         // bytes.
         if source.len() > (u32::max_value() as usize) {
-            return Err("Write bytes length cannot exceed u32::max_value()");
+            return -10;
         }
 
         let start_addr = addr as u32;
 
         if ram_index == !0u32 {
             // Ignore writes to motherboard memory.
-            Ok(())
+            0
         } else if (ram_index as usize) < self.ram_mappings.len() {
             // find the appropriate device.
             let device_index = self.ram_mappings[ram_index as usize];
             let device = self.devices[device_index];
 
             // Clamp to mapped memory (even though devices should ignore invalid writes).
-            let read_size = std::cmp::min(source.len() as u32, device.export_memory_size);
+            let read_size = std::cmp::min(
+                source.len() as u32, device.export_memory_size - start_addr);
 
             match device.write_bytes {
                 Some(ref load_bytes) => {
-                    load_bytes(device.device, start_addr, read_size, &source[0]);
-                    Ok(())
+                    load_bytes(device.device, start_addr, read_size, &source[0])
                 },
-                None => Err("Attempting to write bytres to a device which does not provide \
-                             the write_bytes method"),
+                // Device does not provide write-bytes. This is not a simulator error, it's
+                // an invalid operation which would have to be prevented by the operating
+                // system.
+                None => 0,
             }
         } else {
             // Ignore writes to unmapped memory.
-            Ok(())
+            0
         }
     }
 
@@ -476,18 +479,38 @@ pub extern fn bscomp_motherboard_add_device(
     }
 }
 
+/// C-callable load-bytes method
 pub extern fn bscomp_motherboard_load_bytes(
     mb: *mut Motherboard, addr: u64, bytes_count: u32, destination: *mut u8) -> i32 {
 
     if mb.is_null() {
-        return -1;
-    }
-    if destination.is_null() {
-        return -2;
-    }
+        -1
+    } else if destination.is_null() {
+        -2
+    } else {
+        let mb = unsafe { &mut *mb };
+        let dest = unsafe {
+            std::slice::from_raw_parts_mut(destination, (bytes_count as usize))
+        };
 
-    let mb = unsafe { &mut *mb };
-    let dest = unsafe {
-        std::slice::from_raw_parts_mut(destination, (bytes_count as usize))
-    };
+        mb.load_bytes(addr, dest)
+    }
+}
+
+/// C-callable write-bytes method
+pub extern fn bscomp_motherboard_write_bytes(
+    mb: *mut Motherboard, addr: u64, bytes_count: u32, source: *mut u8) -> i32 {
+
+    if mb.is_null() {
+        -1
+    } else if source.is_null() {
+        -2
+    } else {
+        let mb = unsafe { &mut *mb };
+        let src = unsafe {
+            std::slice::from_raw_parts_mut(source, (bytes_count as usize))
+        };
+
+        mb.write_bytes(addr, src)
+    }
 }
