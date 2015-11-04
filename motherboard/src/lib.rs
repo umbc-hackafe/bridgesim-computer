@@ -69,6 +69,16 @@ pub struct Device {
     /// Should take one argument: the device pointer.
     pub init: Option<extern fn(*mut c_void) -> i32>,
 
+    /// Function used to reset device to startup state if rebooting. Also called on
+    /// initial boot.
+    pub reset: Option<extern fn(*mut c_void) -> i32>,
+
+    /// Function used to cleanup resources before shutting down.
+    ///
+    /// Should not rely on the presence of other devices, as these may have already been
+    /// cleaned up.
+    pub cleanup: Option<extern fn(*mut c_void) -> i32>,
+
     /// Optional function to use to tick the device controller.
     ///
     /// Should take one argument: the device pointer.
@@ -136,6 +146,7 @@ pub struct Motherboard {
     ram_mappings: Vec<usize>,
     deviceinfo_memory: Vec<u8>,
     halt_chan: Option<mpsc::Sender<()>>,
+    reboot_chan: Option<mpsc::Sender<()>>,
 }
 
 impl Motherboard {
@@ -146,6 +157,7 @@ impl Motherboard {
             ram_mappings: Vec::new(),
             deviceinfo_memory: Vec::new(),
             halt_chan: None,
+            reboot_chan: None,
         }
     }
 
@@ -234,6 +246,7 @@ impl Motherboard {
         }
     }
 
+    /// Write bytes to the appropriate device.
     fn write_bytes(&self, addr: u64, source: &[u8]) -> i32 {
         // Shift down to get the device index.
         let ram_index = (addr >> 32) as u32;
@@ -269,6 +282,44 @@ impl Motherboard {
             }
         } else {
             // Ignore writes to unmapped memory.
+            0
+        }
+    }
+
+    /// Send an interrupt to some device.
+    ///
+    /// If the device is `0xffffffff`, send to the motherboard.
+    fn send_interrupt(&self, device: u32, code: u32) -> i32 {
+        if device == !0u32 {
+            match code {
+                1 => match self.halt_chan {
+                    Some(ref ch) => match ch.send(()) {
+                        Ok(_) => 0,
+                        // Dissconnected = not booted
+                        Err(_) => -1,
+                    },
+                    // No channel = not booted
+                    None => -1,
+                },
+                2 => match self.reboot_chan {
+                    Some(ref ch) => match ch.send(()) {
+                        Ok(_) => 0,
+                        // Disconnected = not booted
+                        Err(_) => -1,
+                    },
+                    // No channel = not booted
+                    None => -1,
+                },
+                _ => 0,
+            }
+        } else if (device as usize) < self.devices.len() {
+            let device = self.devices[device as usize];
+
+            match device.interrupt {
+                Some(ref interrupt) => interrupt(device.device, code),
+                None => 0,
+            }
+        } else {
             0
         }
     }
