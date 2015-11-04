@@ -3,11 +3,10 @@
 All devices attached to a motherboard communicate in two ways: mapped memory and
 interrupts. This document details how memory mapping is done.
 
-All devices are limited to 2^32 bytes of mapped memory. Their memory size is stored as a
-32-bit unsigned integer; since a mapping of zero bytes would be the same as not mapping
-any memory, the number of mapped bytes is taken to be the memory size value + 1.
-Equivalently, the value stored in `export_memory_size` is the *index* of the last byte of
-that device's mapped ram.
+All devices are limited to 2^32-1 bytes of mapped memory, Their memory size is stored as a
+32-bit unsigned integer. The last byte in any mapped memory cell, at address
+`0xXXXXXXXXFFFFFFFF` will always read zero, though future changes may switch to have this
+map to some useful value.
 
 Becauses all devices are limited to blocks of 2^32 bytes, memory mapping proceeds in
 blocks of 2^32 bytes. That is, each device's mapped memory starts with its first address
@@ -49,11 +48,9 @@ An example table is shown below.
  Byte Offset | Contents | Table Index | Mapped Bytes
 -------------|----------|-------------|-----------------------------------------
  0           | 3        | N/A         | N/A
- 4           | 0x10     | 0           | 0x0000000000000000 - 0x0000000000000010
- 8           | 0x80     | 1           | 0x0000000100000000 - 0x0000000100000080
- 12          | 0x0      | 2           | 0x0000000200000000 - 0x0000000200000000
-
-Notice that the thrid entry, which has contents zero still maps exactly one byte.
+ 4           | 0x10     | 0           | 0x0000000000000000 - 0x000000000000000F
+ 8           | 0x80     | 1           | 0x0000000100000000 - 0x000000010000007F
+ 12          | 0x0      | 2           | None
 
 ## Device Data Table
 

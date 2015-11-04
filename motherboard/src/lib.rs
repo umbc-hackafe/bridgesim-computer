@@ -190,7 +190,7 @@ impl Motherboard {
 
         // Size-check -- it is a simulator error to try to read more than u32::max_value
         // bytes.
-        if dest.len() > (u32::max_value() as usize) {
+        if dest.len() > u32::max_value() as usize {
             return Err("Read bytes length cannot exceed u32::max_value()");
         }
 
@@ -200,7 +200,7 @@ impl Motherboard {
             // Interpret the end address as an exclusive over the length of the
             // read. Potential for off-by-one errors, but makes it so all reads have at least
             // one byte and makes it so no byte is unmappable.
-            let end_addr = (start_addr as u64) + (dest.len() as u64) + 1;
+            let end_addr = (start_addr as u64) + (dest.len() as u64);
 
             let end_addr = std::cmp::min(end_addr, self.deviceinfo_memory.len() as u64)
                 as u32;
@@ -217,11 +217,11 @@ impl Motherboard {
 
             // Even though devices are expected to ignore invalid reads anyway, limit to
             // mapped memory.
-            let read_size = std::cmp::min(dest.len() as u32, device.export_memory_size);
+            let read_size = std::cmp::min(dest.len(), device.export_memory_size as usize) - 1;
 
             match device.load_bytes {
                 Some(ref load_bytes) => {
-                    load_bytes(device.device, start_addr, read_size, &mut dest[0]);
+                    load_bytes(device.device, start_addr, read_size as usize, &mut dest[0]);
                     Ok(())
                 },
                 None => Err("Attempting to load bytes from a device which does not \
@@ -474,4 +474,20 @@ pub extern fn bscomp_motherboard_add_device(
         Ok(_) => 0,
         Err(_) => -3,
     }
+}
+
+pub extern fn bscomp_motherboard_load_bytes(
+    mb: *mut Motherboard, addr: u64, bytes_count: u32, destination: *mut u8) -> i32 {
+
+    if mb.is_null() {
+        return -1;
+    }
+    if destination.is_null() {
+        return -2;
+    }
+
+    let mb = unsafe { &mut *mb };
+    let dest = unsafe {
+        std::slice::from_raw_parts_mut(destination, (bytes_count as usize))
+    };
 }
