@@ -32,6 +32,7 @@ cd ../ram
 make
 
 cd ../example_runner
-make # or make run to build and run in one step
-make run
+make
+
+./example-runner
 ```

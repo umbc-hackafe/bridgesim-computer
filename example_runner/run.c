@@ -11,7 +11,7 @@ void handle_sigint(int);
 
 int main() {
     // Create a ram device with 256KiB
-    struct Device* ram_device = make_ram_device(0x40000);
+    struct Device* ram_device = bscomp_make_ram_device(0x40000);
     printf("Created a ram device at %p.\n", ram_device);
 
     // Create a motherboard with space for four devices
@@ -31,7 +31,7 @@ int main() {
     printf("Destroyed motherboard.\n");
 
     // Cleanup the ram device
-    delete_ram_device(ram_device);
+    bscomp_delete_ram_device(ram_device);
     printf("Destroyed ram device.\n");
 
     return 0;
