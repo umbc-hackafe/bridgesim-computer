@@ -43,7 +43,7 @@ struct Device* make_ram_device(uint32_t memory_size) {
     return dev;
 }
 
-void delete_rame_device(struct Device* dev) {
+void delete_ram_device(struct Device* dev) {
     if (!dev) {
         return;
     }
