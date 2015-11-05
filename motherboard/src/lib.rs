@@ -411,6 +411,7 @@ impl Motherboard {
         self.deviceinfo_memory.extend(unsafe {
             mem::transmute::<u32, [u8; 4]>(self.devices.len() as u32)
         }.iter());
+
         for (i, device) in self.devices.iter().enumerate() {
             unsafe {
                 self.deviceinfo_memory.extend(
@@ -418,9 +419,13 @@ impl Motherboard {
                 self.deviceinfo_memory.extend(
                     mem::transmute::<u32, [u8; 4]>(device.device_id).iter());
             }
+
             self.deviceinfo_memory.extend(unsafe {
                 mem::transmute::<u32, [u8; 4]>(
-                    self.ram_mappings.binary_search(&i).unwrap() as u32)
+                    match self.ram_mappings.binary_search(&i) {
+                        Ok(i) => i,
+                        Err(_) => 0,
+                    } as u32)
             }.iter());
         }
 
