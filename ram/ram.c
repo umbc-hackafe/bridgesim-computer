@@ -78,7 +78,7 @@ int32_t load_bytes(void* ramdev, uint32_t src, uint32_t len, uint8_t* dest) {
     return 0;
 }
 
-int32_t read_bytes(void* ramdev, uint32_t dest, uint32_t len, uint8_t* src) {
+int32_t write_bytes(void* ramdev, uint32_t dest, uint32_t len, uint8_t* src) {
     if (!ramdev) {
         return -1;
     }
