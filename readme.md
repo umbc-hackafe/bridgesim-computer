@@ -9,7 +9,7 @@ modules to be created in nearly any language.
 An include directory is provided with header files describing the contents of the
 different Rust modules. This should make it easier to create non-rust modules.
 
-# Building
+## Building
 
 I'm currently focused on development, not deployment, so I haven't bothered to properly
 set up something like automake or cmake for this project. It's just some (rather brittle)
