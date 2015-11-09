@@ -358,8 +358,11 @@ impl Motherboard {
 
         let sp: *mut Motherboard = self;
 
+        println!("Begin Booting.");
+
         // Check for required functions on devices.
         for device in self.devices.iter() {
+
             if device.maps_memory()
                 && (device.load_bytes.is_none() || device.write_bytes.is_none()) {
                     return Err("A memory mapping device did not provide all of \
@@ -370,14 +373,20 @@ impl Motherboard {
                 return Err("A device with a boot method did not provide the required \
                             interrupt method.");
             }
+
         }
 
+        println!("Check device functions.");
+
         for device in self.devices.iter() {
+
             match device.register_motherboard {
                 Some(register) => { register(device.device, sp, &mut mbfuncs); },
                 None => {},
             }
         }
+
+        println!("Register with devices.");
 
         // Place an entry in the appropriate memory-mapping table, mapping the index in
         // that table back to the device being mapped.
@@ -429,6 +438,8 @@ impl Motherboard {
             }.iter());
         }
 
+        println!("Prepare Motherboard Memory.");
+
         for device in self.devices.iter() {
             match device.init {
                 // errors will just be ignored....
@@ -437,6 +448,8 @@ impl Motherboard {
             };
         }
 
+        println!("Init devices.");
+
         loop {
             for device in self.devices.iter() {
                 match device.reset {
@@ -444,6 +457,8 @@ impl Motherboard {
                     None => {},
                 };
             }
+
+            println!("Reset devices.");
 
             // Boot the devices.
             let mut thread_handles = Vec::new();
