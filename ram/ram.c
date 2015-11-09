@@ -9,10 +9,10 @@ struct RamDevice {
     uint8_t* memory;
 };
 
-int32_t load_bytes(void*, uint32_t, uint32_t, uint8_t*);
-int32_t write_bytes(void*, uint32_t, uint32_t, uint8_t*);
+static int32_t load_bytes(void*, uint32_t, uint32_t, uint8_t*);
+static int32_t write_bytes(void*, uint32_t, uint32_t, uint8_t*);
 
-struct Device* make_ram_device(uint32_t memory_size) {
+struct Device* bscomp_make_ram_device(uint32_t memory_size) {
     struct Device* dev = malloc(sizeof(struct Device));
     if (!dev) {
         return 0;
@@ -43,13 +43,16 @@ struct Device* make_ram_device(uint32_t memory_size) {
     return dev;
 }
 
-void delete_ram_device(struct Device* dev) {
+void bscomp_delete_ram_device(struct Device* dev) {
     if (!dev) {
         return;
     }
 
     struct RamDevice* ramdev = dev->device;
     if (!ramdev || !ramdev->memory) {
+        // Things are borked already, we're not even going to try to fix it by cleaning
+        // stuff up. That might just make things worse if we have the wrong kind of
+        // pointer.
         return;
     }
 
@@ -64,7 +67,7 @@ void delete_ram_device(struct Device* dev) {
     free(dev);
 }
 
-int32_t load_bytes(void* ramdev, uint32_t src, uint32_t len, uint8_t* dest) {
+static int32_t load_bytes(void* ramdev, uint32_t src, uint32_t len, uint8_t* dest) {
     if (!ramdev) {
         return -1;
     }
@@ -78,7 +81,7 @@ int32_t load_bytes(void* ramdev, uint32_t src, uint32_t len, uint8_t* dest) {
     return 0;
 }
 
-int32_t write_bytes(void* ramdev, uint32_t dest, uint32_t len, uint8_t* src) {
+static int32_t write_bytes(void* ramdev, uint32_t dest, uint32_t len, uint8_t* src) {
     if (!ramdev) {
         return -1;
     }
