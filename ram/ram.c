@@ -2,8 +2,8 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "motherboard/motherboard.h"
-#include "ram/ram.h"
+#include "motherboard.h"
+#include "ram.h"
 
 struct RamDevice {
     uint32_t memory_size;

@@ -1,15 +1,15 @@
-INCLUDES ::= ../include
+INCLUDES += ../motherboard/include
 
 CFLAGS += --std=c99 -Wall
-CFLAGS += $(patsubst %,-I%, $(INCLUDES))
+CFLAGS += $(patsubst %, -I%, $(INCLUDES))
 
 all: libbridgesimram.so libbridgesimram.a
 
-ram.o: ram.c ../include/ram/ram.h ../include/motherboard/motherboard.h
+ram.o: ram.c ram.h ../motherboard/include/motherboard.h
 	$(CC) $(CFLAGS) -fPIC -c -o $@ $<
 
 libbridgesimram.so: ram.o
-	$(CC) $(CFLAGS) -shared -Wl,-soname,$@ -o $@ $^
+	$(CC) $(LDFLAGS) -shared -Wl,-soname,$@ -o $@ $^
 
 libbridgesimram.a: ram.o
 	$(AR) rsc $@ $^

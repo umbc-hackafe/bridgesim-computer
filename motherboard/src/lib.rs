@@ -376,7 +376,7 @@ impl Motherboard {
 
         }
 
-        println!("Check device functions.");
+        println!("Checked device functions.");
 
         for device in self.devices.iter() {
 
@@ -386,7 +386,7 @@ impl Motherboard {
             }
         }
 
-        println!("Register with devices.");
+        println!("Registered with devices.");
 
         // Place an entry in the appropriate memory-mapping table, mapping the index in
         // that table back to the device being mapped.
@@ -438,7 +438,7 @@ impl Motherboard {
             }.iter());
         }
 
-        println!("Prepare Motherboard Memory.");
+        println!("Prepared Motherboard Memory.");
 
         for device in self.devices.iter() {
             match device.init {
@@ -448,7 +448,7 @@ impl Motherboard {
             };
         }
 
-        println!("Init devices.");
+        println!("Initialized devices.");
 
         loop {
             for device in self.devices.iter() {
@@ -506,6 +506,8 @@ impl Motherboard {
             };
         }
 
+        println!("Halted.");
+
         for device in self.devices.iter() {
             match device.cleanup {
                 Some(cleanup) => { cleanup(device.device); },
@@ -513,10 +515,14 @@ impl Motherboard {
             };
         }
 
+        println!("Cleaned up devices.");
+
         {
             let mut ic = self.interrupt_chan.lock().unwrap();
             *ic = None;
         }
+
+        println!("Shutdown.");
 
         Ok(())
     }

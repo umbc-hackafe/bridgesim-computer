@@ -7,7 +7,7 @@ from Cython.Build import cythonize
 extensions = [
     Extension(
         'rdma', ['rdma.pyx'],
-        include_dirs=['../include'],
+        include_dirs=['../motherboard/include'],
     ),
 ]
 

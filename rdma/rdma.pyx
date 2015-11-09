@@ -1,4 +1,5 @@
 from libc.stdint cimport *
+from libc.string cimport memset
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 
 cdef public enum:
@@ -8,7 +9,7 @@ cdef uint32_t next_device_id = 0
 
 rdma_devices = set()
 
-cdef extern from "motherboard/motherboard.h":
+cdef extern from "motherboard.h":
     struct Device:
         void* device
         uint64_t device_type
@@ -19,8 +20,8 @@ cdef extern from "motherboard/motherboard.h":
         int32_t (*init)(void*)
         int32_t (*reset)(void*)
         int32_t (*cleanup)(void*)
-        int32_t (*boot)(void*)
-        int32_t (*interrupt)(void*, uint32_t)
+        int32_t (*boot)(void*) except -1
+        int32_t (*interrupt)(void*, uint32_t) except -1
         int32_t (*register_motherboard)(void*, void*, MotherboardFunctions*);
 
     struct MotherboardFunctions:
@@ -30,11 +31,14 @@ cdef extern from "motherboard/motherboard.h":
 
 cdef class RDMADevice:
     cdef Device* device
+    cdef address, port
 
     def __cinit__(self):
         self.device = <Device*>PyMem_Malloc(sizeof(Device))
         if not self.device:
             raise MemoryError()
+
+        memset(self.device, 0, sizeof(Device)) 
         
         self.device.device = <void*>self
 
@@ -50,17 +54,37 @@ cdef class RDMADevice:
         PyMem_Free(self.device)
 
     def __init__(self, address, port):
+        print('RDMA Init: {}:{}'.format(address, port))
         self.address = address
         self.port = port
 
-cdef public Device* bscomp_new_rdma_device(char* bind_address, int port):
+    def boot(self):
+        print('RDMA Device booted!')
+
+cdef public Device* bscomp_rdma_device_new(char* bind_address, int port) with gil:
     dev = RDMADevice(bind_address.decode('ascii'), port)
     rdma_devices.add(dev)
 
     return dev.device
+
+cdef public void bscomp_rdma_device_destroy(Device* device) with gil:
+    if not device:
+        return
+
+    cdef RDMADevice dev = <RDMADevice?>device.device
+    if dev is None:
+        return
+    device.device = NULL
+    rdma_devices.discard(dev)
     
-cdef int32_t boot(void* device):
+cdef int32_t boot(void* device) except -1 with gil:
+    if not device:
+        raise ValueError('Expected an rdma device, got null')
+    cdef RDMADevice dev = <RDMADevice?>device 
+    if dev is None:
+        raise ValueError('Expected an rdma device, got None')
+
+    dev.boot()
+    
+cdef int32_t interrupt(void* device, uint32_t code) except -1 with gil:
     pass
-    
-cdef int32_t interrupt(void* device, uint32_t code):
-    pass 

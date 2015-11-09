@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "motherboard/motherboard.h"
+#include "motherboard.h"
 
 static const uint64_t ram_device_type_id = (1l << 32) | 1l;
 
