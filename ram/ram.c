@@ -9,10 +9,12 @@ struct RamDevice {
     uint8_t* memory;
 };
 
+static uint32_t next_device_id = 0;
+
 static int32_t load_bytes(void*, uint32_t, uint32_t, uint8_t*);
 static int32_t write_bytes(void*, uint32_t, uint32_t, uint8_t*);
 
-struct Device* bscomp_make_ram_device(uint32_t memory_size) {
+struct Device* bscomp_ram_device_new(uint32_t memory_size) {
     struct Device* dev = malloc(sizeof(struct Device));
     if (!dev) {
         return 0;
@@ -40,10 +42,13 @@ struct Device* bscomp_make_ram_device(uint32_t memory_size) {
     dev->load_bytes = &load_bytes;
     dev->write_bytes = &write_bytes;
 
+    dev->device_type = ram_device_type_id;
+    dev->device_id = next_device_id++;
+
     return dev;
 }
 
-void bscomp_delete_ram_device(struct Device* dev) {
+void bscomp_ram_device_destroy(struct Device* dev) {
     if (!dev) {
         return;
     }
