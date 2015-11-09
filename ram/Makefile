@@ -1,6 +1,6 @@
 INCLUDES ::= ../include
 
-CFLAGS ::= --std=c99 -Wall
+CFLAGS += --std=c99 -Wall
 CFLAGS += $(patsubst %,-I%, $(INCLUDES))
 
 all: libbridgesimram.so libbridgesimram.a

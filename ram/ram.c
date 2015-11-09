@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "motherboard/motherboard.h"
 #include "ram/ram.h"
@@ -19,6 +20,8 @@ struct Device* bscomp_ram_device_new(uint32_t memory_size) {
     if (!dev) {
         return 0;
     }
+
+    memset(dev, 0, sizeof(struct Device));
 
     struct RamDevice* ramdev = malloc(sizeof(struct RamDevice));
     if (!ramdev) {
