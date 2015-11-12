@@ -6,20 +6,14 @@ from Cython.Build import cythonize
 
 extensions = [
     Extension(
-        'rdma', ['rdma.pyx'],
+        'base_device', ['base_device.pyx'],
         include_dirs=[
             '../motherboard/include',
-            '../base_device',
         ],
     ),
 ]
 
 setup(
-    name='RDMA Module for Bridgesim Computer',
-    ext_modules=cythonize(
-        extensions,
-        include_path=[
-            '../base_device',
-        ],
-    ),
+    name='Bridgesim Computer Python Base-Device Module',
+    ext_modules=cythonize(extensions),
 )
