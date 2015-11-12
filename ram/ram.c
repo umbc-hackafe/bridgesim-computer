@@ -15,7 +15,11 @@ static uint32_t next_device_id = 0;
 static int32_t load_bytes(void*, uint32_t, uint32_t, uint8_t*);
 static int32_t write_bytes(void*, uint32_t, uint32_t, uint8_t*);
 
-struct Device* bscomp_device_new(uint32_t memory_size) {
+struct Device* bscomp_device_new(struct RAMConfig* config) {
+    if (!config->memory_size) {
+        return 0;
+    }
+
     struct Device* dev = malloc(sizeof(struct Device));
     if (!dev) {
         return 0;
@@ -29,18 +33,18 @@ struct Device* bscomp_device_new(uint32_t memory_size) {
         return 0;
     }
 
-    uint8_t* mem = malloc(memory_size);
+    uint8_t* mem = malloc(config->memory_size);
     if (!mem) {
         free(dev);
         free(ramdev);
         return 0;
     }
 
-    ramdev->memory_size = memory_size;
+    ramdev->memory_size = config->memory_size;
     ramdev->memory = mem;
 
     dev->device = ramdev;
-    dev->export_memory_size = memory_size;
+    dev->export_memory_size = config->memory_size;
 
     dev->load_bytes = &load_bytes;
     dev->write_bytes = &write_bytes;

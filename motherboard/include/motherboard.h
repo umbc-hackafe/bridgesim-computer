@@ -6,6 +6,10 @@
 
 struct MotherboardFunctions;
 
+struct MotherboardConfig {
+    uint32_t max_devices;
+};
+
 // Represents a device handled by a motherboard
 //
 // All of the device functions supplied should return an error code if they fail. However
@@ -134,7 +138,7 @@ struct MotherboardFunctions {
 //
 // To dealocate a motherboard created with this function, always pass the resulting
 // pointer to bscomp_motherboard_destroy.
-void* bscomp_motherboard_new(uint32_t max_devices);
+void* bscomp_motherboard_new(struct MotherboardConfig* config);
 
 // Free a motherboard created by bscomp_motherboard_new.
 //

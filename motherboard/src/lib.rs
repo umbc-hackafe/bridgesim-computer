@@ -14,6 +14,12 @@ enum MotherboardInterrupt {
     Reboot,
 }
 
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct MotherboardConfig {
+    pub max_devices: u32,
+}
+
 /// Represents a device handled by a motherboard
 ///
 /// All of the device functions supplied should return an error code if they fail. However
@@ -572,8 +578,9 @@ impl Motherboard {
 /// called from C or another language. In order to make sure that this memory is
 /// dealocated, it should always be passed to `bscomp_motherboard_destroy`.
 #[no_mangle]
-pub extern fn bscomp_motherboard_new(max_devices: u32) -> Box<Motherboard> {
-    Box::new(Motherboard::new(max_devices as usize))
+pub extern fn bscomp_motherboard_new(config: *const MotherboardConfig) -> Box<Motherboard> {
+    let config = unsafe { &*config };
+    Box::new(Motherboard::new(config.max_devices as usize))
 }
 
 /// Destroys a motherboard constructed by `bscomp_motherboard_new`
