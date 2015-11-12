@@ -15,7 +15,7 @@ static uint32_t next_device_id = 0;
 static int32_t load_bytes(void*, uint32_t, uint32_t, uint8_t*);
 static int32_t write_bytes(void*, uint32_t, uint32_t, uint8_t*);
 
-struct Device* bscomp_ram_device_new(uint32_t memory_size) {
+struct Device* bscomp_device_new(uint32_t memory_size) {
     struct Device* dev = malloc(sizeof(struct Device));
     if (!dev) {
         return 0;
@@ -51,7 +51,7 @@ struct Device* bscomp_ram_device_new(uint32_t memory_size) {
     return dev;
 }
 
-void bscomp_ram_device_destroy(struct Device* dev) {
+void bscomp_device_destroy(struct Device* dev) {
     if (!dev) {
         return;
     }
@@ -75,7 +75,7 @@ void bscomp_ram_device_destroy(struct Device* dev) {
     free(dev);
 }
 
-static int32_t load_bytes(void* ramdev, uint32_t src, uint32_t len, uint8_t* dest) {
+int32_t load_bytes(void* ramdev, uint32_t src, uint32_t len, uint8_t* dest) {
     if (!ramdev) {
         return -1;
     }
@@ -89,7 +89,7 @@ static int32_t load_bytes(void* ramdev, uint32_t src, uint32_t len, uint8_t* des
     return 0;
 }
 
-static int32_t write_bytes(void* ramdev, uint32_t dest, uint32_t len, uint8_t* src) {
+int32_t write_bytes(void* ramdev, uint32_t dest, uint32_t len, uint8_t* src) {
     if (!ramdev) {
         return -1;
     }
