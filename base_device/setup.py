@@ -11,6 +11,12 @@ extensions = [
             '../motherboard/include',
         ],
     ),
+    Extension(
+        'sodevice', ['sodevice.pyx'],
+        include_dirs=[
+            '../motherboard/include',
+        ],
+    ),
 ]
 
 setup(

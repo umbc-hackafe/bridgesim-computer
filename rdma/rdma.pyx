@@ -7,7 +7,7 @@ import queue
 from base_device cimport Device, MotherboardFunctions
 cimport base_device
 
-cdef public enum:
+cdef enum:
     rdma_device_type_id = <uint64_t>2 << <uint64_t>32
 
 cdef uint32_t next_device_id = 0
