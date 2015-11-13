@@ -578,9 +578,13 @@ impl Motherboard {
 /// called from C or another language. In order to make sure that this memory is
 /// dealocated, it should always be passed to `bscomp_motherboard_destroy`.
 #[no_mangle]
-pub extern fn bscomp_motherboard_new(config: *const MotherboardConfig) -> Box<Motherboard> {
-    let config = unsafe { &*config };
-    Box::new(Motherboard::new(config.max_devices as usize))
+pub extern fn bscomp_motherboard_new(config: *const MotherboardConfig) -> Option<Box<Motherboard>> {
+    if config.is_null() {
+        None
+    } else {
+        let config = unsafe { &*config };
+        Some(Box::new(Motherboard::new(config.max_devices as usize)))
+    }
 }
 
 /// Destroys a motherboard constructed by `bscomp_motherboard_new`
