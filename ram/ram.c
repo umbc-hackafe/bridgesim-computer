@@ -15,7 +15,7 @@ static uint32_t next_device_id = 0;
 static int32_t load_bytes(void*, uint32_t, uint32_t, uint8_t*);
 static int32_t write_bytes(void*, uint32_t, uint32_t, uint8_t*);
 
-struct Device* bscomp_device_new(struct RAMConfig* config) {
+struct Device* bscomp_device_new(const struct RAMConfig* config) {
     if (!config->memory_size) {
         return 0;
     }

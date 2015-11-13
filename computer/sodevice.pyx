@@ -1,5 +1,5 @@
-from base_device cimport Device, MotherboardFunctions
-cimport base_device
+from computer.base_device cimport Device, MotherboardFunctions
+from computer cimport base_device
 
 cdef extern from "dlfcn.h":
     void* dlopen(const char* file, int mode) nogil
@@ -27,6 +27,7 @@ cdef class SODevice(base_device.BaseDevice):
     cdef void (*destroy_func)(Device*) nogil
 
     cdef readonly str soname
+    cdef bytes soname_bytes
 
     def __cinit__(self):
         self.device = NULL
@@ -34,10 +35,20 @@ cdef class SODevice(base_device.BaseDevice):
         self.create_func = NULL
         self.destroy_func = NULL
 
-    def __init__(self, soname):
-        self.soname = str(soname)
+    def __init__(self, str soname, constructor_data):
+        self.soname = soname
+        self.soname_bytes = soname.encode('utf-8')
 
-        self.shared_object = dlopen(self.soname, RTLD_NOW | RTLD_GLOBAL)
+        cdef char* constructor_arg
+
+        if constructor_data is None:
+            constructor_arg = NULL
+        elif isinstance(constructor_data, bytes):
+            constructor_arg = constructor_data
+        else:
+            raise TypeError('Constructor data must be bytes or None')
+
+        self.shared_object = dlopen(self.soname_bytes, RTLD_NOW | RTLD_GLOBAL)
         if not self.shared_object:
             raise LoadError('Unable to load {}.'.format(self.soname))
 
@@ -55,6 +66,10 @@ cdef class SODevice(base_device.BaseDevice):
             raise LoadError(
                 '{} does not contain required function "bscomp_device_destroy".'
                 .format(self.soname))
+
+        self.device = self.create_func(<void*>constructor_arg)
+        if not self.device:
+            raise LoadError('Unable to create a device!')
 
     def __dealloc__(self):
         if not self.device and not self.shared_object:

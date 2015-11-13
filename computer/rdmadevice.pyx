@@ -4,8 +4,8 @@ from cpython.mem cimport PyMem_Malloc, PyMem_Free
 
 import queue
 
-from base_device cimport Device, MotherboardFunctions
-cimport base_device
+from computer.base_device cimport Device, MotherboardFunctions
+from computer cimport base_device
 
 cdef enum:
     rdma_device_type_id = <uint64_t>2 << <uint64_t>32

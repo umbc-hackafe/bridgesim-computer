@@ -11,7 +11,7 @@ struct RAMConfig {
     uint32_t memory_size;
 };
 
-struct Device* bscomp_device_new(struct RAMConfig* config);
+struct Device* bscomp_device_new(const struct RAMConfig* config);
 void bscomp_device_destroy(struct Device* dev);
 
 #endif // bscomp_ram_h
