@@ -584,12 +584,12 @@ impl Motherboard {
 /// called from C or another language. In order to make sure that this memory is
 /// dealocated, it should always be passed to `bscomp_motherboard_destroy`.
 #[no_mangle]
-pub extern fn bscomp_motherboard_new(config: *const MotherboardConfig) -> Option<Box<Motherboard>> {
+pub extern fn bscomp_motherboard_new(config: *const MotherboardConfig) -> *mut Motherboard {
     if config.is_null() {
-        None
+        std::ptr::null_mut()
     } else {
         let config = unsafe { &*config };
-        Some(Box::new(Motherboard::new(config.max_devices as usize)))
+        Box::into_raw(Box::new(Motherboard::new(config.max_devices as usize)))
     }
 }
 
@@ -604,8 +604,11 @@ pub extern fn bscomp_motherboard_new(config: *const MotherboardConfig) -> Option
 /// that the pointer passed into it was initially a valid `Box<Motherboard>`, created by
 /// `bscomp_motherboard_new`. Passing anything else is undefined behavior.
 #[no_mangle]
-pub extern fn bscomp_motherboard_destroy(mb: Box<Motherboard>) {
-    drop(mb);
+pub extern fn bscomp_motherboard_destroy(mb: *mut Motherboard) {
+    if !mb.is_null() {
+        let mb = unsafe { Box::from_raw(mb) };
+        drop(mb);
+    }
 }
 
 /// Gets the number of slots total in the motherboard.
