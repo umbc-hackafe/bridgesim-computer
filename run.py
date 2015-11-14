@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import struct
 import threading
+import time
 
 from computer import sodevice, rdmadevice
 
@@ -22,7 +23,7 @@ def main():
 
     try:
         while True:
-            pass
+            time.sleep(10000000)
     except KeyboardInterrupt:
         motherboard.halt()
 
