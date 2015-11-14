@@ -70,6 +70,12 @@ cdef class SOMotherboard:
         self.motherboard = NULL
 
     def __init__(self, soname, constructor_data):
+        """Constructor data should be a bytes object representing a platform-standard
+        representation of the MotherboardConfig type for this particular motherboard.
+        If the motherboard config for this motherboard type requires special format
+        arguments such as pointers to strings, it is recommended to write a specialized
+        wrapper type rather than attempting to use this one.
+        """
         self.soname = string_check(soname)
         cdef bytes soname_bytes = self.soname.encode('utf-8')
         cdef const char* soname_cstr = soname_bytes
@@ -251,6 +257,12 @@ cdef class SODevice(basedevice.BaseDevice):
         self.destroy_func = NULL
 
     def __init__(self, soname, constructor_data):
+        """Constructor data should be a bytes object representing a platform-standard
+        representation of the Device's Config type for this particular device.
+        If the device config for this device type requires special format arguments such
+        as pointers to strings, it is recommended to write a specialized wrapper type
+        rather than attempting to use this one.
+        """
         self.soname = string_check(soname)
         cdef bytes soname_bytes = soname.encode('utf-8')
         cdef const char* soname_cstr = soname_bytes
