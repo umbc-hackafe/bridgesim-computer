@@ -58,20 +58,34 @@ cdef class RDMADevice(base_device.CallbackDevice):
         else:
             return 'RDMA Device NULL'
 
-cdef int32_t boot(void* device) except -1 with gil:
+cdef int32_t boot(void* device) with gil:
     if not device:
-        raise ValueError('Expected an rdma device, got null')
+        print('Expected an rdma device, got null')
+        return -1
     cdef RDMADevice dev = <RDMADevice?>device
     if dev is None:
-        raise ValueError('Expected an rdma device, got None')
+        print('Expected an rdma device, got None')
+        return -1
 
-    dev.boot()
+    try:
+        dev.boot()
+    except Exception as err:
+        print(err)
+        return -1
+    return 0
 
-cdef int32_t interrupt(void* device, uint32_t code) except -1 with gil:
+cdef int32_t interrupt(void* device, uint32_t code) with gil:
     if not device:
-        raise ValueError('Expected an rdma device, got null')
+        print('Expected an rdma device, got null')
+        return -1
     cdef RDMADevice dev = <RDMADevice?>device
     if dev is None:
-        raise ValueError('Expected an rdma device, got None')
-
-    dev.interrupt(code)
+        print('Expected an rdma device, got None')
+        return -1
+    
+    try:
+        dev.interrupt(code)
+    except Exception as err:
+        print(err)
+        return -1
+    return 0

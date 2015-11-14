@@ -5,7 +5,7 @@ cdef class CallbackDevice(BaseDevice):
         self.motherboard = motherboard
 
 cdef int32_t register_motherboard(
-        void* device, void* motherboard, MotherboardFunctions* mbfuncs) except -1 with gil:
+        void* device, void* motherboard, MotherboardFunctions* mbfuncs) with gil:
     if not device:
         raise ValueError('Expected a callback device, got null')
     cdef CallbackDevice dev = <CallbackDevice?>device
