@@ -15,7 +15,7 @@ to run a basic computer is written in Python.
 
 ## Building
 
-You will need Rust >= 1.3.0, Cargo >= 0.4.0, an implementation of `make`, an
+You will need Rust >= 1.4.0, Cargo >= 0.4.0, an implementation of `make`, an
 implementation of `cc`, Python 3, setuptools >= 18, and Cython >= 0.22. If you find that
 there are other dependencies not listed here, file a bug.
 

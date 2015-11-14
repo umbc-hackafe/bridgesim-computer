@@ -26,6 +26,7 @@ def main():
             time.sleep(10000000)
     except KeyboardInterrupt:
         motherboard.halt()
+        motherboard_thread.join()
 
 if __name__ == '__main__':
     main()
