@@ -1,3 +1,4 @@
+#cython: language_level=3
 from libc.stdint cimport *
 from libc.string cimport memset
 from cpython.mem cimport PyMem_Malloc, PyMem_Free

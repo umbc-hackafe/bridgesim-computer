@@ -1,3 +1,4 @@
+#cython: language_level=3
 cdef class CallbackDevice(BaseDevice):
     cdef register_motherboard(self, void* motherboard, MotherboardFunctions* mbfuncs):
         print(self, 'registering motherboard')
