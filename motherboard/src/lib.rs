@@ -394,6 +394,9 @@ impl Motherboard {
 
         println!("Registered with devices.");
 
+        // Reset ram mappings in case we've booted before.
+        self.ram_mappings.clear();
+
         // Place an entry in the appropriate memory-mapping table, mapping the index in
         // that table back to the device being mapped.
         for (i, device) in self.devices.iter().enumerate() {
@@ -404,9 +407,12 @@ impl Motherboard {
 
         // Compute according to the layout described in memoryhandling.md the address of
         // each table which will be in the system's low memory.
-        let ramstart: u64 = 3 * mem::size_of::<u64>() as u64;
+        let ramstart: u64 = 2 * mem::size_of::<u64>() as u64 + 0xffffffff00000000u64;
         let devstart: u64 = ramstart
             + (self.ram_mappings.len() as u64 + 1) * mem::size_of::<u32>() as u64;
+
+        // Clean out any old mapping to ensure we start fresh.
+        self.deviceinfo_memory.clear();
 
         // Load the low memory table according to the layout described in memoryhandling.md
         self.deviceinfo_memory.extend(
