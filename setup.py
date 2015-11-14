@@ -5,7 +5,7 @@ from setuptools.extension import Extension
 
 extensions = [
     Extension(
-        'computer.base_device', ['computer/base_device.pyx'],
+        'computer.basedevice', ['computer/basedevice.pyx'],
         include_dirs=[
             'motherboard/include',
         ],

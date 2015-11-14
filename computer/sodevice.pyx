@@ -1,6 +1,6 @@
 from libc.stdint cimport *
-from computer.base_device cimport Device, MotherboardFunctions
-from computer cimport base_device
+from computer.basedevice cimport Device, MotherboardFunctions
+from computer cimport basedevice
 
 cdef extern from "dlfcn.h":
     void* dlopen(const char* file, int mode) nogil
@@ -81,7 +81,7 @@ cdef class SOMotherboard:
             constructor_arg = constructor_data
         else:
             raise TypeError('Constructor data must be bytes or None')
-        
+
         with nogil:
             self.shared_object = dlopen(soname_cstr, RTLD_NOW | RTLD_GLOBAL)
         if not self.shared_object:
@@ -93,7 +93,7 @@ cdef class SOMotherboard:
         if not self.create_func:
             raise LoadError(
                 '{} does not contain required function "bscomp_motherboard_new".'
-                .format(self.soname))      
+                .format(self.soname))
 
         with nogil:
             self.destroy_func = <void (*)(void*) nogil>dlsym(
@@ -208,7 +208,7 @@ cdef class SOMotherboard:
             res = self.is_full_func(self.motherboard)
         return bool(res)
 
-    def add_device(self, base_device.BaseDevice device):
+    def add_device(self, basedevice.BaseDevice device):
         cdef int32_t res
         with nogil:
             res = self.add_device_func(self.motherboard, device.device)
@@ -237,7 +237,7 @@ cdef class SOMotherboard:
         if res != 0:
             raise CalledActionError(res, 'bscomp_motherboard_reboot')
 
-cdef class SODevice(base_device.BaseDevice):
+cdef class SODevice(basedevice.BaseDevice):
     cdef void* shared_object
     cdef Device* (*create_func)(void*) nogil
     cdef void (*destroy_func)(Device*) nogil
@@ -275,7 +275,7 @@ cdef class SODevice(base_device.BaseDevice):
         if not self.create_func:
             raise LoadError(
                 '{} does not contain required function "bscomp_device_new".'
-                .format(self.soname))      
+                .format(self.soname))
 
         with nogil:
             self.destroy_func = <void (*)(Device*) nogil>dlsym(

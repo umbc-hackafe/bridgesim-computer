@@ -1,3 +1,1 @@
-from . import base_device
-from . import sodevice
-from . import rdmadevice
+__all__ = ['basedevice', 'sodevice', 'rdmadevice']

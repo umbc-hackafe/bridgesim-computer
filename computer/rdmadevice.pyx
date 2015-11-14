@@ -4,15 +4,15 @@ from cpython.mem cimport PyMem_Malloc, PyMem_Free
 
 import queue
 
-from computer.base_device cimport Device, MotherboardFunctions
-from computer cimport base_device
+from computer.basedevice cimport Device, MotherboardFunctions
+from computer cimport basedevice
 
 cdef enum:
     rdma_device_type_id = <uint64_t>2 << <uint64_t>32
 
 cdef uint32_t next_device_id = 0
 
-cdef class RDMADevice(base_device.CallbackDevice):
+cdef class RDMADevice(basedevice.CallbackDevice):
     cdef address, port, interrupts
 
     def __cinit__(self):
@@ -31,7 +31,7 @@ cdef class RDMADevice(base_device.CallbackDevice):
 
         self.device.boot = boot
         self.device.interrupt = interrupt
-        self.device.register_motherboard = base_device.register_motherboard
+        self.device.register_motherboard = basedevice.register_motherboard
 
     def __dealloc__(self):
         PyMem_Free(self.device)
@@ -82,7 +82,7 @@ cdef int32_t interrupt(void* device, uint32_t code) with gil:
     if dev is None:
         print('Expected an rdma device, got None')
         return -1
-    
+
     try:
         dev.interrupt(code)
     except Exception as err:
