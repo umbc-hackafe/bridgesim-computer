@@ -20,24 +20,17 @@ struct Device* bscomp_device_new(const struct RAMConfig* config) {
     }
 
     struct Device* dev = malloc(sizeof(struct Device));
-    if (!dev) {
+    struct RamDevice* ramdev = malloc(sizeof(struct RamDevice));
+    uint8_t* mem = malloc(config->memory_size);
+
+    if (!dev || !ramdev || !mem) {
+        free(dev);
+        free(ramdev);
+        free(mem);
         return 0;
     }
 
     *dev = (const struct Device){0};
-
-    struct RamDevice* ramdev = malloc(sizeof(struct RamDevice));
-    if (!ramdev) {
-        free(dev);
-        return 0;
-    }
-
-    uint8_t* mem = malloc(config->memory_size);
-    if (!mem) {
-        free(dev);
-        free(ramdev);
-        return 0;
-    }
 
     ramdev->memory_size = config->memory_size;
     ramdev->memory = mem;
