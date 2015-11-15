@@ -22,8 +22,8 @@ def main():
     motherboard_thread.start()
 
     try:
-        while True:
-            time.sleep(10000000)
+        while motherboard_thread.is_alive():
+            time.sleep(1)
     except KeyboardInterrupt:
         motherboard.halt()
         motherboard_thread.join()

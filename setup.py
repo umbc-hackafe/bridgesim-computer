@@ -27,5 +27,6 @@ extensions = [
 setup(
     name='Bridgesim Computer Python Base-Device Module',
     setup_requires=['cython>=0.22'],
+    install_requires=['requests>=2.8', 'flask>=0.10'],
     ext_modules=extensions,
 )
