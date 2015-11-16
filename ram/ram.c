@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "motherboard.h"
 #include "ram.h"
@@ -11,8 +12,9 @@ struct RamDevice {
 
 static uint32_t next_device_id = 0;
 
-static int32_t load_bytes(void*, uint32_t, uint32_t, uint8_t*);
-static int32_t write_bytes(void*, uint32_t, uint32_t, uint8_t*);
+int32_t load_bytes(void*, uint32_t, uint32_t, uint8_t*);
+int32_t write_bytes(void*, uint32_t, uint32_t, uint8_t*);
+int32_t reset(void*);
 
 struct Device* bscomp_device_new(const struct RAMConfig* config) {
     if (!config || !config->memory_size) {
@@ -40,6 +42,7 @@ struct Device* bscomp_device_new(const struct RAMConfig* config) {
 
     dev->load_bytes = &load_bytes;
     dev->write_bytes = &write_bytes;
+    dev->reset = &reset;
 
     dev->device_type = ram_device_type_id;
     dev->device_id = next_device_id++;
@@ -95,6 +98,17 @@ int32_t write_bytes(void* ramdev, uint32_t dest, uint32_t len, uint8_t* src) {
     for (uint32_t i = 0; i < len && dest + i < rd->memory_size; i++) {
         rd->memory[i] = src[i];
     }
+
+    return 0;
+}
+
+int32_t reset(void* ramdev) {
+    if (!ramdev) {
+        return -1;
+    }
+
+    struct RamDevice* rd = ramdev;
+    memset(rd->memory, 0, rd->memory_size);
 
     return 0;
 }
