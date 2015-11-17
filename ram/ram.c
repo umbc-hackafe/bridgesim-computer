@@ -12,9 +12,9 @@ struct RamDevice {
 
 static uint32_t next_device_id = 0;
 
-int32_t load_bytes(void*, uint32_t, uint32_t, uint8_t*);
-int32_t write_bytes(void*, uint32_t, uint32_t, uint8_t*);
-int32_t reset(void*);
+static int32_t load_bytes(void*, uint32_t, uint32_t, uint8_t*);
+static int32_t write_bytes(void*, uint32_t, uint32_t, uint8_t*);
+static int32_t reset(void*);
 
 struct Device* bscomp_device_new(const struct RAMConfig* config) {
     if (!config || !config->memory_size) {
@@ -74,7 +74,7 @@ void bscomp_device_destroy(struct Device* dev) {
     free(dev);
 }
 
-int32_t load_bytes(void* ramdev, uint32_t src, uint32_t len, uint8_t* dest) {
+static int32_t load_bytes(void* ramdev, uint32_t src, uint32_t len, uint8_t* dest) {
     if (!ramdev) {
         return -1;
     }
@@ -88,7 +88,7 @@ int32_t load_bytes(void* ramdev, uint32_t src, uint32_t len, uint8_t* dest) {
     return 0;
 }
 
-int32_t write_bytes(void* ramdev, uint32_t dest, uint32_t len, uint8_t* src) {
+static int32_t write_bytes(void* ramdev, uint32_t dest, uint32_t len, uint8_t* src) {
     if (!ramdev) {
         return -1;
     }
@@ -102,7 +102,7 @@ int32_t write_bytes(void* ramdev, uint32_t dest, uint32_t len, uint8_t* src) {
     return 0;
 }
 
-int32_t reset(void* ramdev) {
+static int32_t reset(void* ramdev) {
     if (!ramdev) {
         return -1;
     }
