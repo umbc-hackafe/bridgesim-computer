@@ -34,17 +34,20 @@ struct StackCPUDevice {
     int32_t boot();
     int32_t interrupt(uint32_t code);
     int32_t register_motherboard(void* motherboard, MotherboardFunctions* mbfuncs);
+
+    int32_t process_code(uint32_t code);
+    int32_t process_instruction();
 };
 
 static uint32_t next_device_id = 0;
 
 extern "C" {
-    int32_t init(void*);
-    int32_t cleanup(void*);
-    int32_t reset(void*);
-    int32_t boot(void*);
-    int32_t interrupt(void*, uint32_t);
-    int32_t register_motherboard(void*, void*, MotherboardFunctions*);
+    static int32_t init(void*);
+    static int32_t cleanup(void*);
+    static int32_t reset(void*);
+    static int32_t boot(void*);
+    static int32_t interrupt(void*, uint32_t);
+    static int32_t register_motherboard(void*, void*, MotherboardFunctions*);
 
     struct Device* bscomp_device_new(const struct StackCPUConfig* config) {
         if (!config || !config->stack_size) {
@@ -100,16 +103,15 @@ extern "C" {
         delete dev;
     }
 
-    int32_t init(void* cpudev) {
+    static int32_t init(void* cpudev) {
         if (!cpudev) {
             return -1;
         }
         StackCPUDevice* cd = static_cast<StackCPUDevice*>(cpudev);
-        cout << "init" << endl;
         return cd->init();
     }
 
-    int32_t cleanup(void* cpudev) {
+    static int32_t cleanup(void* cpudev) {
         if (!cpudev) {
             return -1;
         }
@@ -117,25 +119,23 @@ extern "C" {
         return cd->cleanup();
     }
 
-    int32_t reset(void* cpudev) {
+    static int32_t reset(void* cpudev) {
         if (!cpudev) {
             return -1;
         }
         StackCPUDevice* cd = static_cast<StackCPUDevice*>(cpudev);
-        cout << "reset" << endl;
         return cd->reset();
     }
 
-    int32_t boot(void* cpudev) {
+    static int32_t boot(void* cpudev) {
         if (!cpudev) {
             return -1;
         }
         StackCPUDevice* cd = static_cast<StackCPUDevice*>(cpudev);
-        cout << "boot" << endl;
         return cd->boot();
     }
 
-    int32_t interrupt(void* cpudev, uint32_t code) {
+    static int32_t interrupt(void* cpudev, uint32_t code) {
         if (!cpudev) {
             return -1;
         }
@@ -143,24 +143,21 @@ extern "C" {
         return cd->interrupt(code);
     }
 
-    int32_t register_motherboard(void* cpudev, void* motherboard, MotherboardFunctions* mbfuncs) {
+    static int32_t register_motherboard(void* cpudev, void* motherboard, MotherboardFunctions* mbfuncs) {
         if (!cpudev) {
             return -1;
         }
         StackCPUDevice* cd = static_cast<StackCPUDevice*>(cpudev);
-        cout << "register" << endl;
         return cd->register_motherboard(motherboard, mbfuncs);
     }
 } // end of extern "C"
 
 int32_t StackCPUDevice::init() {
-    cout << "in init" << endl;
     try {
         stack = new uint32_t[stack_size];
     } catch(const bad_alloc& ex) {
         return -1;
     }
-    cout << "end init" << endl;
     return 0;
 }
 
@@ -176,9 +173,11 @@ int32_t StackCPUDevice::reset() {
     for (size_t i = 0; i < stack_size; ++i) {
         stack[i] = 0;
     }
+
     interrupt_lock.lock();
     queue<uint32_t>().swap(interrupts);
     interrupt_lock.unlock();
+
     return 0;
 }
 
@@ -195,8 +194,22 @@ int32_t StackCPUDevice::boot() {
         }
         interrupt_lock.unlock();
 
-        if (has_code && code == 0) {
-            break;
+        if (has_code) {
+            if (code == 0) {
+                break;
+            } else  {
+                auto res = process_code(code);
+                if (res) {
+                    cout << "Simulator error -- Stack CPU Halting." << endl;
+                    return res;
+                }
+            }
+        } else {
+            auto res = process_instruction();
+            if (res) {
+                cout << "Simulator error -- Stack CPU Halting." << endl;
+                return res;
+            }
         }
     }
     cout << "Stack CPU Shutting Down" << endl;
@@ -214,5 +227,20 @@ int32_t StackCPUDevice::interrupt(uint32_t code) {
 int32_t StackCPUDevice::register_motherboard(void* motherboard, MotherboardFunctions* mbfuncs) {
     this->motherboard = motherboard;
     this->mbfuncs = *mbfuncs;
+    return 0;
+}
+
+int32_t StackCPUDevice::process_code(uint32_t code) {
+    cout << "CPU: Ignoring Interrupt " << code << endl;
+    return 0;
+}
+
+int32_t StackCPUDevice::process_instruction() {
+    uint8_t instr;
+    auto res = mbfuncs.read_bytes(motherboard, ip, 1, &instr);
+    if (res) {
+        return res;
+    }
+
     return 0;
 }
