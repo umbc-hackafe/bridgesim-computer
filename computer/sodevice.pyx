@@ -90,7 +90,7 @@ cdef class SOMotherboard:
             raise TypeError('Constructor data must be bytes or None')
 
         with nogil:
-            self.shared_object = dlopen(soname_cstr, RTLD_NOW | RTLD_GLOBAL)
+            self.shared_object = dlopen(soname_cstr, RTLD_NOW | RTLD_LOCAL)
         if not self.shared_object:
             raise LoadError('Unable to load {}.'.format(self.soname))
 
@@ -278,7 +278,7 @@ cdef class SODevice(basedevice.BaseDevice):
             raise TypeError('Constructor data must be bytes or None')
 
         with nogil:
-            self.shared_object = dlopen(soname_cstr, RTLD_NOW | RTLD_GLOBAL)
+            self.shared_object = dlopen(soname_cstr, RTLD_NOW | RTLD_LOCAL)
         if not self.shared_object:
             raise LoadError('Unable to load {}.'.format(self.soname))
 

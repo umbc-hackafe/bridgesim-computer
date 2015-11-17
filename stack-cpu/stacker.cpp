@@ -1,6 +1,8 @@
 #include <cstdint>
 #include <iostream>
+#include <mutex>
 #include <new>
+#include <queue>
 
 extern "C" {
 #include "motherboard.h"
@@ -19,6 +21,9 @@ struct StackCPUDevice {
     uint64_t ip;
     // Stack pointer
     uint64_t sp;
+
+    queue<uint32_t> interrupts;
+    mutex interrupt_lock;
 
     void* motherboard;
     MotherboardFunctions mbfuncs;
@@ -71,6 +76,7 @@ extern "C" {
         dev->device_type = stack_cpu_device_type_id;
         dev->device_id = next_device_id++;
 
+        cout << "completed create" << endl;
         return dev;
     }
 
@@ -99,6 +105,7 @@ extern "C" {
             return -1;
         }
         StackCPUDevice* cd = static_cast<StackCPUDevice*>(cpudev);
+        cout << "init" << endl;
         return cd->init();
     }
 
@@ -115,6 +122,7 @@ extern "C" {
             return -1;
         }
         StackCPUDevice* cd = static_cast<StackCPUDevice*>(cpudev);
+        cout << "reset" << endl;
         return cd->reset();
     }
 
@@ -123,6 +131,7 @@ extern "C" {
             return -1;
         }
         StackCPUDevice* cd = static_cast<StackCPUDevice*>(cpudev);
+        cout << "boot" << endl;
         return cd->boot();
     }
 
@@ -139,16 +148,19 @@ extern "C" {
             return -1;
         }
         StackCPUDevice* cd = static_cast<StackCPUDevice*>(cpudev);
+        cout << "register" << endl;
         return cd->register_motherboard(motherboard, mbfuncs);
     }
 } // end of extern "C"
 
 int32_t StackCPUDevice::init() {
+    cout << "in init" << endl;
     try {
         stack = new uint32_t[stack_size];
     } catch(const bad_alloc& ex) {
         return -1;
     }
+    cout << "end init" << endl;
     return 0;
 }
 
@@ -164,16 +176,38 @@ int32_t StackCPUDevice::reset() {
     for (size_t i = 0; i < stack_size; ++i) {
         stack[i] = 0;
     }
+    interrupt_lock.lock();
+    queue<uint32_t>().swap(interrupts);
+    interrupt_lock.unlock();
     return 0;
 }
 
 int32_t StackCPUDevice::boot() {
     cout << "Stack CPU Received BOOT" << endl;
+    while (true) {
+        uint32_t code = 0;
+        bool has_code = false;
+        interrupt_lock.lock();
+        if (!interrupts.empty()) {
+            code = interrupts.front();
+            interrupts.pop();
+            has_code = true;
+        }
+        interrupt_lock.unlock();
+
+        if (has_code && code == 0) {
+            break;
+        }
+    }
+    cout << "Stack CPU Shutting Down" << endl;
     return 0;
 }
 
 int32_t StackCPUDevice::interrupt(uint32_t code) {
     cout << "Stack CPU Received INTERRUPT " << code << endl;
+    interrupt_lock.lock();
+    interrupts.push(code);
+    interrupt_lock.unlock();
     return 0;
 }
 
