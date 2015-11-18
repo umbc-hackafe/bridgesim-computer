@@ -43,6 +43,9 @@ struct StackCPUDevice {
     queue<uint32_t> interrupts;
     mutex interrupt_lock;
 
+    bool running;
+    mutex running_lock;
+
     void* motherboard;
     MotherboardFunctions mbfuncs;
 
@@ -50,8 +53,11 @@ struct StackCPUDevice {
     int32_t cleanup();
     int32_t reset();
     int32_t boot();
+    int32_t halt();
     int32_t interrupt(uint32_t code);
     int32_t register_motherboard(void* motherboard, MotherboardFunctions* mbfuncs);
+
+    bool check_running();
 
     int32_t process_code(uint32_t code);
     int32_t process_instruction();
@@ -129,6 +135,7 @@ extern "C" {
     static int32_t cleanup(void*);
     static int32_t reset(void*);
     static int32_t boot(void*);
+    static int32_t halt(void*);
     static int32_t interrupt(void*, uint32_t);
     static int32_t register_motherboard(void*, void*, MotherboardFunctions*);
 
@@ -156,6 +163,7 @@ extern "C" {
         dev->cleanup = &cleanup;
         dev->reset = &reset;
         dev->boot = &boot;
+        dev->halt = &halt;
         dev->interrupt = &interrupt;
         dev->register_motherboard = &register_motherboard;
 
@@ -218,6 +226,14 @@ extern "C" {
         return cd->boot();
     }
 
+    static int32_t halt(void* cpudev) {
+        if (!cpudev) {
+            return -1;
+        }
+        StackCPUDevice* cd = static_cast<StackCPUDevice*>(cpudev);
+        return cd->halt();
+    }
+
     static int32_t interrupt(void* cpudev, uint32_t code) {
         if (!cpudev) {
             return -1;
@@ -265,8 +281,9 @@ int32_t StackCPUDevice::reset() {
 }
 
 int32_t StackCPUDevice::boot() {
+    running = true;
     cout << "Stack CPU Received BOOT" << endl;
-    while (true) {
+    while (check_running()) {
         uint32_t code = 0;
         bool has_code = false;
         if (settings & (1 << 0)) {
@@ -281,25 +298,28 @@ int32_t StackCPUDevice::boot() {
         }
 
         if (has_code) {
-            if (code == 0) {
-                break;
-            } else  {
-                auto res = process_code(code);
-                if (res) {
-                    cout << "Simulator error -- Stack CPU Halting." << endl;
-                    return res;
-                }
+            auto res = process_code(code);
+            if (res) {
+                cout << "Simulator error (code " << res << ") -- Stack CPU Halting." << endl;
+                return res;
             }
         } else {
             auto res = process_instruction();
             if (res) {
-                cout << "Simultator error code " << res << " -- CPU Shutting Down."
-                     << endl;
+                cout << "Simulator error (code " << res << ") -- Stack CPU Halting." << endl;
                 return res;
             }
         }
     }
     cout << "Stack CPU Shutting Down" << endl;
+    return 0;
+}
+
+int32_t StackCPUDevice::halt() {
+    cout << "Stack CPU Received HALT" << endl;
+    running_lock.lock();
+    running = false;
+    running_lock.unlock();
     return 0;
 }
 
@@ -315,6 +335,14 @@ int32_t StackCPUDevice::register_motherboard(void* motherboard, MotherboardFunct
     this->motherboard = motherboard;
     this->mbfuncs = *mbfuncs;
     return 0;
+}
+
+bool StackCPUDevice::check_running() {
+    bool result;
+    running_lock.lock();
+    result = running;
+    running_lock.unlock();
+    return result;
 }
 
 int32_t StackCPUDevice::process_code(uint32_t code) {

@@ -92,14 +92,20 @@ pub struct Device {
     /// cleaned up.
     pub cleanup: Option<extern fn(*mut c_void) -> i32>,
 
-    /// Optional function to use to tick the device controller.
+    /// Optional function to use to start the device controller.
     ///
     /// Should take one argument: the device pointer. This function should run until the
     /// device is shut down.
     ///
-    /// Any device which implements this function is expected to provide an `interrupt`
-    /// function which shuts down the boot loop when interrupt zero is received.
+    /// Any device which implements this function is expected to provide a `halt`
+    /// function which shuts down the boot loop.
     pub boot: Option<extern fn(*mut c_void) -> i32>,
+
+    /// Optional function to use to halt this device controller.
+    ///
+    /// Should take one argument: the device pointer. This function should cause boot to
+    /// stop running.
+    pub halt: Option<extern fn(*mut c_void) -> i32>,
 
     /// Optional function to use to send an interrupt code to the device.
     ///
@@ -375,9 +381,9 @@ impl Motherboard {
                                 the required functions for memory mapping.");
                 }
 
-            if device.boot.is_some() && device.interrupt.is_none() {
+            if device.boot.is_some() && device.halt.is_none() {
                 return Err("A device with a boot method did not provide the required \
-                            interrupt method.");
+                            halt method.");
             }
 
         }
@@ -503,8 +509,8 @@ impl Motherboard {
             // Order all devices to halt.
             for device in self.devices.iter() {
                 if device.boot.is_some() {
-                    // Have already assured that interrupt is some before booting.
-                    device.interrupt.unwrap()(device.device, 0);
+                    // Have already assured that hatl is Some before booting.
+                    device.halt.unwrap()(device.device);
                 }
             }
 

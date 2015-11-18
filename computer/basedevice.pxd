@@ -13,6 +13,7 @@ cdef extern from "motherboard.h":
         int32_t (*reset)(void*) nogil
         int32_t (*cleanup)(void*) nogil
         int32_t (*boot)(void*) nogil
+        int32_t (*halt)(void*) nogil
         int32_t (*interrupt)(void*, uint32_t) nogil
         int32_t (*register_motherboard)(void*, void*, MotherboardFunctions*) nogil
 

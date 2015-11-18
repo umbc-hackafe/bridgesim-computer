@@ -4,7 +4,6 @@ from libc.string cimport memset
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 
 import flask
-import queue
 import requests
 import threading
 
@@ -21,7 +20,7 @@ cdef uint32_t next_device_id = 0
 
 cdef class RDMADevice(basedevice.CallbackDevice):
     cdef address, port
-    cdef interrupts
+    cdef halt_event
 
     cdef app
 
@@ -39,8 +38,9 @@ cdef class RDMADevice(basedevice.CallbackDevice):
         self.device.device_id = next_device_id
         next_device_id += 1
 
+        self.device.reset = reset
         self.device.boot = boot
-        self.device.interrupt = interrupt
+        self.device.halt = halt
         self.device.register_motherboard = basedevice.register_motherboard
 
     def __dealloc__(self):
@@ -50,7 +50,7 @@ cdef class RDMADevice(basedevice.CallbackDevice):
         print('RDMA Init: {}:{}'.format(address, port))
         self.address = address
         self.port = port
-        self.interrupts = queue.Queue()
+        self.halt_event = threading.Event()
 
         self.app = flask.Flask(__name__)
         self.app.add_url_rule(
@@ -81,8 +81,7 @@ cdef class RDMADevice(basedevice.CallbackDevice):
         app_run_thread = threading.Thread(target=self.app.run, daemon=True, kwargs=run_kwargs)
         app_run_thread.start()
 
-        for code in iter(self.interrupts.get, 0):
-            pass
+        self.halt_event.wait()
 
         requests.post('http://{}:{}/shutdown'.format(self.address, self.port))
 
@@ -99,9 +98,13 @@ cdef class RDMADevice(basedevice.CallbackDevice):
 
         print(self, 'shutting down.')
 
-    def interrupt(self, code):
-        print('{} received interrupt {}'.format(self, code))
-        self.interrupts.put(code)
+    def reset(self):
+        print(self, 'reset.')
+        self.halt_event.clear()
+
+    def halt(self):
+        print(self, 'halt triggered.')
+        self.halt_event.set()
 
     def ferrorhandler(self, err):
         return flask.jsonify(status='ERROR', message=str(err))
@@ -242,6 +245,22 @@ cdef class RDMADevice(basedevice.CallbackDevice):
         else:
             return 'RDMA Device NULL'
 
+cdef int32_t reset(void* device) with gil:
+    if not device:
+        print('Expected an rdma device, got null')
+        return -1
+    cdef RDMADevice dev = <RDMADevice?>device
+    if dev is None:
+        print('Expected an rdma device, got None')
+        return -1
+
+    try:
+        dev.reset()
+    except Exception as err:
+        print(err)
+        return -1
+    return 0
+
 cdef int32_t boot(void* device) with gil:
     if not device:
         print('Expected an rdma device, got null')
@@ -258,7 +277,7 @@ cdef int32_t boot(void* device) with gil:
         return -1
     return 0
 
-cdef int32_t interrupt(void* device, uint32_t code) with gil:
+cdef int32_t halt(void* device) with gil:
     if not device:
         print('Expected an rdma device, got null')
         return -1
@@ -268,7 +287,7 @@ cdef int32_t interrupt(void* device, uint32_t code) with gil:
         return -1
 
     try:
-        dev.interrupt(code)
+        dev.halt()
     except Exception as err:
         print(err)
         return -1

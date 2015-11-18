@@ -81,18 +81,22 @@ struct Device {
     // of devices is undefined, so don't rely on device memory here.
     int32_t (*cleanup)(void*);
 
-    // Device Optional function to use to run the device. Called once per boot, after init
+    // Device
+    // Optional function to use to run the device. Called once per boot, after init
     // and reset. Accessing other devices is Ok here.
     //
-    // It should loop until the device shuts down. If this method exists, then
-    // interrupt is expeted to be provided, with interrupt 0 telling the device to stop
-    // running. If a device provides boot but not interrupt, it is an error on motheboard
-    // boot. If a device provides boot and does not quit when interrupt 0 is received, the
-    // motherboard will hang waiting for it to shutdown.
+    // It should loop until the device shuts down. If this method exists, then halt is
+    // expeted to be provided. If a device provides boot but not interrupt, it is an error
+    // on motheboard boot. If a device provides boot and does not quit when halt is
+    // called, the motherboard will hang waiting for it to shutdown.
     //
     // This should not handle device initialization, as the initialization order of these
     // devices with respect to any others is not defined.
     int32_t (*boot)(void*);
+
+    // Device
+    // Optional function to use to stop boot from running. Required if boot is provided.
+    int32_t (*halt)(void*);
 
     // Device, Interrupt Code
     // Optional function to use to send an interrupt code to the device.
