@@ -23,6 +23,23 @@ struct StackCPUDevice {
     // Stack pointer
     uint64_t sp;
 
+    uint64_t interrupt_stack;
+    uint64_t interrupt_table;
+    uint32_t interrupt_count;
+
+    // Bitvector.
+    // 0: Interrupt Enable
+    // 1: Protect
+    uint32_t settings;
+
+    // Bitvector.
+    // 0: Invalid Command
+    // 1: Invalid Command Argument
+    // 2: Stack Underflow
+    // 3: Stack Overflow
+    // 4: Protected Operation
+    uint32_t errors;
+
     queue<uint32_t> interrupts;
     mutex interrupt_lock;
 
@@ -40,10 +57,10 @@ struct StackCPUDevice {
     int32_t process_instruction();
 
     template<typename T>
-    int32_t pop(T& dest);
+    void pop(T& dest);
 
     template<typename T>
-    int32_t push(T source);
+    void push(T source);
 
     template<typename T>
     int32_t add();
@@ -92,13 +109,17 @@ struct StackCPUDevice {
     int32_t shift();
     template<typename T>
     int32_t unshift();
-    int32_t read_sp();
-    int32_t write_sp();
+
+    int32_t read_register(uint8_t argument);
+    int32_t write_register(uint8_t argument);
+
     template<typename T, typename U>
     int32_t resize();
     template<typename T>
     int32_t swap();
     int32_t jump();
+
+    int32_t internal_interrupt();
 };
 
 static uint32_t next_device_id = 0;
@@ -248,13 +269,16 @@ int32_t StackCPUDevice::boot() {
     while (true) {
         uint32_t code = 0;
         bool has_code = false;
-        interrupt_lock.lock();
-        if (!interrupts.empty()) {
-            code = interrupts.front();
-            interrupts.pop();
-            has_code = true;
+        if (settings & (1 << 0)) {
+            // Don't pop a hardware interrupt if interrupts are disabled.
+            interrupt_lock.lock();
+            if (!interrupts.empty()) {
+                code = interrupts.front();
+                interrupts.pop();
+                has_code = true;
+            }
+            interrupt_lock.unlock();
         }
-        interrupt_lock.unlock();
 
         if (has_code) {
             if (code == 0) {
@@ -267,14 +291,11 @@ int32_t StackCPUDevice::boot() {
                 }
             }
         } else {
-            try {
-                auto res = process_instruction();
-                if (res) {
-                    cout << "Bad instruction; error: " << res << endl;
-                }
-            } catch (const int32_t& simerror) {
-                cout << "Simultator error code " << simerror << " -- CPU Shutting Down."
+            auto res = process_instruction();
+            if (res) {
+                cout << "Simultator error code " << res << " -- CPU Shutting Down."
                      << endl;
+                return res;
             }
         }
     }
@@ -297,7 +318,12 @@ int32_t StackCPUDevice::register_motherboard(void* motherboard, MotherboardFunct
 }
 
 int32_t StackCPUDevice::process_code(uint32_t code) {
-    cout << "CPU: Ignoring Interrupt " << code << endl;
+    if (!(settings & (1 << 0))) {
+        // Ignore if interrupts disabled -- this only affects software
+        // interrupts. Interrupt disable prevents popping from the interrupt vector for
+        // "hardware" interrupts.
+        return 0;
+    }
     return 0;
 }
 
@@ -321,7 +347,8 @@ int32_t StackCPUDevice::process_code(uint32_t code) {
         return OP<double>();                    \
         break;                                  \
     default:                                    \
-        return 4;                               \
+        errors |= 1 << 1;                       \
+        break;                                  \
     }
 
 #define SIZE_SWITCH_NOFLOAT(OP, size) switch (size) {   \
@@ -340,7 +367,8 @@ int32_t StackCPUDevice::process_code(uint32_t code) {
         return OP<uint64_t>();                          \
         break;                                          \
     default:                                            \
-        return 4;                                       \
+        errors |= 1 << 1;                               \
+        break;                                          \
     }
 
 #define RESIZE_SWITCH_INNER(fromsize, from)                 \
@@ -366,9 +394,9 @@ int32_t StackCPUDevice::process_code(uint32_t code) {
 
 int32_t StackCPUDevice::process_instruction() {
     uint8_t instruction[2];
-    auto res = mbfuncs.read_bytes(motherboard, ip, 2, instruction);
-    if (res) {
-        throw res;
+    auto read_result = mbfuncs.read_bytes(motherboard, ip, 2, instruction);
+    if (read_result) {
+        return read_result;
     }
     ip += 2;
 
@@ -376,6 +404,8 @@ int32_t StackCPUDevice::process_instruction() {
     uint8_t& size = instruction[1];
 
     switch (instr) {
+    case 0: // NOP
+        break;
     case '+': // add
         SIZE_SWITCH(add, size)
         break;
@@ -441,11 +471,11 @@ int32_t StackCPUDevice::process_instruction() {
         break;
     case 'U': // Unshift
         SIZE_SWITCH(unshift, size)
-    case 'P': // Read Stack Pointer
-        return read_sp();
+    case 'P': // Read Register
+        return read_register(size);
         break;
-    case 'p': // Write Stack Pointer
-        return write_sp();
+    case 'p': // Write Resister
+        return write_register(size);
         break;
     case 'z': // Resize
         // OLDSIZE = size & 0b111, NEWSIZE = (size & 0b111000) >> 3
@@ -457,79 +487,104 @@ int32_t StackCPUDevice::process_instruction() {
             RESIZE_SWITCH_INNER(6, uint64_t)
             RESIZE_SWITCH_INNER(7, double)
         default:
-            return 4;
+            errors |= 1 << 1;
+            break;
         }
         break;
-    case 's': // Swap
+    case '$': // Swap
         SIZE_SWITCH(swap, size)
         break;
-    case 'j': // Jump
+    case 'J': // Jump
         return jump();
         break;
+    case 'I': // Interrupt
+        return internal_interrupt();
+        break;
+    default:
+        errors |= 1 << 0;
     }
 
-    return 16;
+    return 0;
 }
 
+#define PROTECT if (settings & (1<<1)) {        \
+        errors |= 1 << 4;                       \
+        return 0;                               \
+    } else {
+
+#define ENDPROTECT }
+
 template<typename T>
-int32_t StackCPUDevice::pop(T& dest) {
+void StackCPUDevice::pop(T& dest) {
     static_assert(sizeof(T) <= sizeof(uint32_t), "Dest must be no more than 4 bytes.");
-    if (sp < 1) return 1;
+    if (sp < 1) {
+        errors |= 1 << 2;
+        return;
+    }
     dest = *((T*)(&stack[--sp]));
-    return 0;
 }
 
 template<>
-int32_t StackCPUDevice::pop<uint64_t>(uint64_t& dest) {
-    if (sp < 2) return 1;
+void StackCPUDevice::pop<uint64_t>(uint64_t& dest) {
+    if (sp < 2) {
+        errors |= 1 << 2;
+        return;
+    }
     uint32_t* blocks = (uint32_t*)(&dest);
     blocks[1] = stack[--sp];
     blocks[0] = stack[--sp];
-    return 0;
 }
 
 template<>
-int32_t StackCPUDevice::pop<double>(double& dest) {
-    if (sp < 2) return 1;
+void StackCPUDevice::pop<double>(double& dest) {
+    if (sp < 2) {
+        errors |= 1 << 2;
+        return;
+    }
     uint32_t* blocks = (uint32_t*)(&dest);
     blocks[1] = stack[--sp];
     blocks[0] = stack[--sp];
-    return 0;
 }
 
 template<typename T>
-int32_t StackCPUDevice::push(T source) {
+void StackCPUDevice::push(T source) {
     static_assert(sizeof(T) <= sizeof(uint32_t), "Source must be no more than 4 bytes.");
-    if (sp >= stack_size) return 2;
+    if (sp >= stack_size) {
+        errors |= 1 << 3;
+        return;
+    }
     *((T*)(&stack[sp++])) = source;
-    return 0;
 }
 
 template<>
-int32_t StackCPUDevice::push<uint64_t>(uint64_t source) {
-    if (sp >= stack_size - 1) return 2;
+void StackCPUDevice::push<uint64_t>(uint64_t source) {
+    if (sp >= stack_size - 1) {
+        errors |= 1 << 3;
+        return;
+    }
     uint32_t* blocks = (uint32_t*)(&source);
     stack[sp++] = blocks[0];
     stack[sp++] = blocks[1];
-    return 0;
 }
 
 template<>
-int32_t StackCPUDevice::push<double>(double source) {
-    if (sp >= stack_size - 1) return 2;
+void StackCPUDevice::push<double>(double source) {
+    if (sp >= stack_size - 1) {
+        errors |= 1 << 3;
+        return;
+    }
     uint32_t* blocks = (uint32_t*)(&source);
     stack[sp++] = blocks[0];
     stack[sp++] = blocks[1];
-    return 0;
 }
 
 #define BINARY_OPERATOR(opname, OP) template<typename T>   \
     int32_t StackCPUDevice::opname() {                     \
         T a, b;                                            \
-        auto res1 = pop<T>(a);                             \
-        auto res2 = pop<T>(b);                             \
-        auto res3 = push<T>(a OP b);                       \
-        return res1 | res2 | res3;                         \
+        pop<T>(a);                                         \
+        pop<T>(b);                                         \
+        push<T>(a OP b);                                   \
+        return 0;                                          \
     }
 
 BINARY_OPERATOR(add, +)
@@ -543,10 +598,10 @@ BINARY_OPERATOR(xor_, ^)
 #define BINARY_COMPARISON(opname, OP) template<typename T> \
     int32_t StackCPUDevice::opname() {                     \
         T a, b;                                            \
-        auto res1 = pop<T>(a);                             \
-        auto res2 = pop<T>(b);                             \
-        auto res3 = push<int32_t>(a OP b);                 \
-        return res1 | res2 | res3;                         \
+        pop<T>(a);                                         \
+        pop<T>(b);                                         \
+        push<int32_t>(a OP b);                             \
+        return 0;                                          \
     }
 
 BINARY_COMPARISON(le, <=)
@@ -559,133 +614,192 @@ BINARY_COMPARISON(ge, >=)
 template<typename T>
 int32_t StackCPUDevice::not_() {
     T a;
-    auto res1 = pop<T>(a);
-    auto res2 = push<T>(~a);
-    return res1 | res2;
+    pop<T>(a);
+    push<T>(~a);
+    return 0;
 }
 
 template<typename T>
 int32_t StackCPUDevice::negate() {
     T a;
-    auto res1 = pop<T>(a);
-    auto res2 = push<T>(-a);
-    return res1 | res2;
+    pop<T>(a);
+    push<T>(-a);
+    return 0;
 }
-
-#define B
 
 template<typename T>
 int32_t StackCPUDevice::copy() {
     T a;
-    auto res1 = pop<T>(a);
-    auto res2 = push<T>(a);
-    auto res3 = push<T>(a);
-    return res1 | res2 | res3;
+    pop<T>(a);
+    push<T>(a);
+    push<T>(a);
+    return 0;
 }
 
 template<typename T>
 int32_t StackCPUDevice::discard() {
     T a;
-    return pop<T>(a);
+    pop<T>(a);
+    return 0;
 }
 
 template<typename T>
 int32_t StackCPUDevice::read() {
     uint64_t addr;
-    auto res1 = pop<uint64_t>(addr);
+    pop<uint64_t>(addr);
     T val;
-    auto res2 = mbfuncs.read_bytes(motherboard, addr, sizeof(val), (uint8_t*)(&val));
-    if (res2) {
-        throw res2;
+    auto read_result = mbfuncs.read_bytes(motherboard, addr, sizeof(val), (uint8_t*)(&val));
+    if (read_result) {
+        return read_result;
     }
-    auto res3 = push<T>(val);
-    return res1 | res3;
+    push<T>(val);
+    return 0;
 }
 
 template<typename T>
 int32_t StackCPUDevice::read_immediate() {
     T val;
-    auto res1 = mbfuncs.read_bytes(motherboard, ip, sizeof(val), (uint8_t*)(&val));
+    auto read_result = mbfuncs.read_bytes(motherboard, ip, sizeof(val), (uint8_t*)(&val));
     ip += sizeof(val);
-    if (res1) {
-        throw res1;
+    if (read_result) {
+        throw read_result;
     }
-    auto res2 = push<T>(val);
-    return res2;
+    push<T>(val);
+    return 0;
 }
 
 template<typename T>
 int32_t StackCPUDevice::write() {
     uint64_t addr;
-    auto res1 = pop<uint64_t>(addr);
+    pop<uint64_t>(addr);
     T val;
-    auto res2 = pop<T>(val);
-    auto res3 = mbfuncs.write_bytes(motherboard, addr, sizeof(val), (uint8_t*)(&val));
-    if (res3) {
-        throw res3;
+    pop<T>(val);
+    auto write_result = mbfuncs.write_bytes(motherboard, addr, sizeof(val), (uint8_t*)(&val));
+    if (write_result) {
+        return write_result;
     }
-    return res1 | res2;
+    return 0;
 }
 
 template<typename T>
 int32_t StackCPUDevice::shift() {
     T val;
-    auto res1 = pop<T>(val);
+    pop<T>(val);
     sp -= sizeof(val);
-    auto res2 = mbfuncs.write_bytes(motherboard, sp, sizeof(val), (uint8_t*)(&val));
-    if (res2) {
-        throw res2;
+    auto write_result = mbfuncs.write_bytes(motherboard, sp, sizeof(val), (uint8_t*)(&val));
+    if (write_result) {
+        return write_result;
     }
-    return res1;
+    return 0;
 }
 
 template<typename T>
 int32_t StackCPUDevice::unshift() {
     T val;
-    auto res1 = mbfuncs.read_bytes(motherboard, sp, sizeof(val), (uint8_t*)(&val));
-    if (res1) {
-        throw res1;
+    auto read_result = mbfuncs.read_bytes(motherboard, sp, sizeof(val), (uint8_t*)(&val));
+    if (read_result) {
+        return read_result;
     }
-    auto res2 = push<T>(val);
-    return res2;
+    push<T>(val);
+    return 0;
 }
 
-int32_t StackCPUDevice::read_sp() {
-    return push<uint64_t>(sp);
+int32_t StackCPUDevice::read_register(uint8_t arg) {
+    switch (arg) {
+    case 0: // Stack Pointer
+        push<uint64_t>(sp);
+        break;
+    case 1: // Interrupt Stack Start
+        push<uint64_t>(interrupt_stack);
+        break;
+    case 2: // Interrupt Table
+        push<uint64_t>(interrupt_table);
+        break;
+    case 3: // Interrupt Count
+        push<uint32_t>(interrupt_count);
+        break;
+    case 4: // Settings
+        push<uint32_t>(settings);
+        break;
+    case 5: // Errors
+        push<uint32_t>(errors);
+        break;
+    default:
+        errors |= 1 << 1;
+        break;
+    }
+
+    return 0;
 }
 
-int32_t StackCPUDevice::write_sp() {
-    return pop<uint64_t>(sp);
+int32_t StackCPUDevice::write_register(uint8_t arg) {
+    switch (arg) {
+    case 0: // Stack Pointer
+        pop<uint64_t>(sp);
+        break;
+    case 1: // Interrupt Stack Start
+        PROTECT
+        pop<uint64_t>(interrupt_stack);
+        ENDPROTECT
+        break;
+    case 2: // Interrupt Table
+        PROTECT
+        pop<uint64_t>(interrupt_table);
+        ENDPROTECT
+        break;
+    case 3: // Interrupt Count
+        PROTECT
+        pop<uint32_t>(interrupt_count);
+        ENDPROTECT
+        break;
+    case 4: // Settings
+        PROTECT
+        pop<uint32_t>(settings);
+        ENDPROTECT
+        break;
+    case 5: // Errors
+        pop<uint32_t>(errors);
+        break;
+    default:
+        errors |= 1 << 1;
+    }
+
+    return 0;
 }
 
 template<typename T, typename U>
 int32_t StackCPUDevice::resize() {
-    if (sizeof(T) == sizeof(U)) return 0;
     T original;
     U replacement;
-    auto res1 = pop<T>(original);
+    pop<T>(original);
     replacement = static_cast<U>(original);
-    auto res2 = push<U>(replacement);
-    return res1 | res2;
+    push<U>(replacement);
+    return 0;
 }
 
 template<typename T>
 int32_t StackCPUDevice::swap() {
     T a, b;
-    auto res1 = pop<T>(a);
-    auto res2 = pop<T>(b);
-    auto res3 = push<T>(a);
-    auto res4 = push<T>(b);
-    return res1 | res2 | res3 | res4;
+    pop<T>(a);
+    pop<T>(b);
+    push<T>(a);
+    push<T>(b);
+    return 0;
 }
 
 int32_t StackCPUDevice::jump() {
     uint64_t addr;
     int32_t condition;
-    auto res1 = pop(addr);
-    auto res2 = pop(condition);
+    pop(addr);
+    pop(condition);
     if (condition) {
         ip = addr;
     }
-    return res1 | res2;
+    return 0;
+}
+
+int32_t StackCPUDevice::internal_interrupt() {
+    uint32_t code;
+    pop(code);
+    return process_code(code);
 }
