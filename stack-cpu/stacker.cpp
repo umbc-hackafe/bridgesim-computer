@@ -116,6 +116,9 @@ struct StackCPUDevice {
     template<typename T>
     int32_t unshift();
 
+    int32_t shift_all();
+    int32_t unshift_all();
+
     int32_t read_register(uint8_t argument);
     int32_t write_register(uint8_t argument);
 
@@ -352,6 +355,9 @@ int32_t StackCPUDevice::process_code(uint32_t code) {
         // "hardware" interrupts.
         return 0;
     }
+
+
+
     return 0;
 }
 
@@ -499,6 +505,13 @@ int32_t StackCPUDevice::process_instruction() {
         break;
     case 'U': // Unshift
         SIZE_SWITCH(unshift, size)
+        break;
+    case 's': // Shift-All
+        shift_all();
+        break;
+    case 'u': // Unshift-All
+        unshift_all();
+        break;
     case 'P': // Read Register
         return read_register(size);
         break;
@@ -545,65 +558,65 @@ int32_t StackCPUDevice::process_instruction() {
 template<typename T>
 void StackCPUDevice::pop(T& dest) {
     static_assert(sizeof(T) <= sizeof(uint32_t), "Dest must be no more than 4 bytes.");
-    if (sp < 1) {
+    if (isp < 1) {
         errors |= 1 << 2;
         return;
     }
-    dest = *((T*)(&stack[--sp]));
+    dest = *((T*)(&stack[--isp]));
 }
 
 template<>
 void StackCPUDevice::pop<uint64_t>(uint64_t& dest) {
-    if (sp < 2) {
+    if (isp < 2) {
         errors |= 1 << 2;
         return;
     }
     uint32_t* blocks = (uint32_t*)(&dest);
-    blocks[1] = stack[--sp];
-    blocks[0] = stack[--sp];
+    blocks[1] = stack[--isp];
+    blocks[0] = stack[--isp];
 }
 
 template<>
 void StackCPUDevice::pop<double>(double& dest) {
-    if (sp < 2) {
+    if (isp < 2) {
         errors |= 1 << 2;
         return;
     }
     uint32_t* blocks = (uint32_t*)(&dest);
-    blocks[1] = stack[--sp];
-    blocks[0] = stack[--sp];
+    blocks[1] = stack[--isp];
+    blocks[0] = stack[--isp];
 }
 
 template<typename T>
 void StackCPUDevice::push(T source) {
     static_assert(sizeof(T) <= sizeof(uint32_t), "Source must be no more than 4 bytes.");
-    if (sp >= stack_size) {
+    if (isp >= stack_size) {
         errors |= 1 << 3;
         return;
     }
-    *((T*)(&stack[sp++])) = source;
+    *((T*)(&stack[isp++])) = source;
 }
 
 template<>
 void StackCPUDevice::push<uint64_t>(uint64_t source) {
-    if (sp >= stack_size - 1) {
+    if (isp >= stack_size - 1) {
         errors |= 1 << 3;
         return;
     }
     uint32_t* blocks = (uint32_t*)(&source);
-    stack[sp++] = blocks[0];
-    stack[sp++] = blocks[1];
+    stack[isp++] = blocks[0];
+    stack[isp++] = blocks[1];
 }
 
 template<>
 void StackCPUDevice::push<double>(double source) {
-    if (sp >= stack_size - 1) {
+    if (isp >= stack_size - 1) {
         errors |= 1 << 3;
         return;
     }
     uint32_t* blocks = (uint32_t*)(&source);
-    stack[sp++] = blocks[0];
-    stack[sp++] = blocks[1];
+    stack[isp++] = blocks[0];
+    stack[isp++] = blocks[1];
 }
 
 #define BINARY_OPERATOR(opname, OP) template<typename T>   \
@@ -729,6 +742,41 @@ int32_t StackCPUDevice::unshift() {
         return read_result;
     }
     push<T>(val);
+    return 0;
+}
+
+int32_t StackCPUDevice::shift_all() {
+    uint32_t val;
+    uint32_t stack_pointer = isp;
+    while (isp != 0) {
+        pop<uint32_t>(val);
+        sp -= sizeof(val);
+        auto write_result = mbfuncs.write_bytes(motherboard, sp, sizeof(val), (uint8_t*)(&val));
+        if (write_result) {
+            return write_result;
+        }
+    }
+    sp -= sizeof(stack_pointer);
+    auto write_result = mbfuncs.write_bytes(motherboard, sp, sizeof(stack_pointer), (uint8_t*)(&stack_pointer));
+    return write_result;
+}
+
+int32_t StackCPUDevice::unshift_all() {
+    uint32_t stack_pointer;
+    uint32_t val;
+    auto read_result = mbfuncs.read_bytes(motherboard, sp, sizeof(stack_pointer), (uint8_t*)(&stack_pointer));
+    if (read_result) {
+        return read_result;
+    }
+    sp += sizeof(stack_pointer);
+    for (uint32_t i = 0; i < stack_pointer; i++) {
+        read_result = mbfuncs.read_bytes(motherboard, sp, sizeof(val), (uint8_t*)(&val));
+        if (read_result) {
+            return read_result;
+        }
+        sp += sizeof(val);
+        push<uint32_t>(val);
+    }
     return 0;
 }
 
