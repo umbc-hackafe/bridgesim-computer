@@ -10,7 +10,7 @@ def main():
     ramdev = sodevice.SODevice('ram/libbridgesimram.so', ram_config)
     rdmadev = rdmadevice.RDMADevice('127.0.0.1', 8080)
 
-    cpu_config = struct.pack('@N', 32)
+    cpu_config = struct.pack('@I', 32)
     cpudev = sodevice.SODevice('stack-cpu/libbridgesimstackcpu.so', cpu_config)
 
 

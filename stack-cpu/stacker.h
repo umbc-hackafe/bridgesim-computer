@@ -16,7 +16,7 @@ extern "C" {
 static const uint64_t stack_cpu_device_type_id = 2l;
 
 struct StackCPUConfig {
-    size_t stack_size;
+    uint32_t stack_size;
 };
 
 struct Device* bscomp_device_new(const struct StackCPUConfig* config);
